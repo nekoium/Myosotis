@@ -41,16 +41,21 @@ Make visual feedback for coding agents faster to communicate: invoke from anywhe
 - Escape: cancel and close.
 - Global hotkey: initiate the workflow.
 
+## Prototype defaults — subject to user testing
+
+- Export uses the current selection bounds, including resized blank canvases.
+- `1` pen (default), `2` arrow, `3` rectangle, `4` numbered mark.
+- Click-versus-drag threshold: 6 logical pixels of Manhattan movement.
+- Border hover delay: 350 ms; a resize cursor appears, then left drag resizes.
+- Annotations keep their screen positions when resizing; export clips them to selection bounds.
+- Discrete Space actions ignore auto-repeat; pen strokes end on Space release.
+- Attempt to restore the previous foreground window after completion or cancellation.
+
 ## Open interaction decisions
 
-- Blank-canvas export bounds after resizing.
-- Initial tool set, number-key assignments, and default tool.
-- Click-versus-drag movement threshold.
-- Border hover delay, resize activation, and visual feedback.
-- How existing annotations behave when the selection is resized.
-- Space key-repeat behavior for discrete marks; handling simultaneous mouse, keyboard, and stylus input.
+- Simultaneous mouse, keyboard, and stylus input behavior beyond ordinary single-input use.
 - Stylus pressure and eraser support.
-- Focus restoration after completion or cancellation.
+- Accessibility and final toolbar placement.
 
 ## Proposed implementation direction — not yet confirmed
 
@@ -73,4 +78,4 @@ Make visual feedback for coding agents faster to communicate: invoke from anywhe
 
 ## Scope
 
-This document records the proposed product design. No application implementation or final technology selection has been made.
+This document records the product design and prototype defaults. The Windows interaction prototype uses PySide6 / Qt Widgets / QPainter; C++ / Qt Quick remains the proposed production direction. Cross-platform integration and production performance have not been validated.
