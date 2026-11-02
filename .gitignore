@@ -1,1 +1,4 @@
 .local-archive/
+/target/
+/dist/
+/.tmp/

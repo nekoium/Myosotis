@@ -73,7 +73,7 @@ Use a shared Rust core with native implementations for each platform. Share the 
 - Windows, overlays, focus restoration, and tray integration.
 - Capture, permissions, global shortcuts, clipboard formats, and mouse/stylus input.
 - Rendering, text, and image encoding using operating-system facilities.
-- Windows: Rust with Win32 and Direct2D / DirectWrite through the `windows` crate.
+- Windows: Rust with Win32 and Direct2D / DirectWrite through the `windows` crate. The MVP captures SDR desktop pixels through GDI and encodes PNG through Windows Imaging Component. Clipboard output includes CF_DIB and PNG.
 - macOS: native AppKit / Core Graphics integration; exact language bindings to be validated.
 - Linux: native window-system integration and desktop portals; packaging and desktop support baseline to be validated.
 
@@ -115,4 +115,6 @@ Use a shared Rust core with native implementations for each platform. Share the 
 
 ## Scope
 
-This document records the product design and native architecture decision. The earlier Python implementation is retained locally only as an interaction reference. The public repository currently contains documentation; native implementation, cross-platform integration, release size, and production performance remain to be validated.
+This document records the product design and native architecture decision. The Windows MVP now implements the capture → annotate → clipboard workflow, resident tray integration, and the interaction defaults above. The document model is platform-independent Rust; Windows API calls are isolated in `src/windows/`. Release builds statically link the C runtime and embed an application icon, version information, and a per-monitor DPI awareness manifest. `tools/Package.ps1` builds the complete portable package and enforces the download and installed size budgets.
+
+The earlier Python implementation remains locally as an interaction reference. Native macOS and Linux implementations, pressure/eraser support, full toolbar accessibility, HDR handling, and broad multi-monitor validation remain future work. Windows integration and performance evidence are recorded in `docs/VALIDATION.md`.
