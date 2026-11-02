@@ -2,7 +2,7 @@
 
 ### Talk is cheap, show them the pic.
 
-Myosotis is a blazing fast screenshot widget based on Rust, human- and agent-friendly, no hassle, no clutters. Screenshot, scribble, and paste into your agent.
+Myosotis is a blazing fast screenshot widget based on Rust, human- and agent-friendly, no hassle, no clutters. Screenshot, scribble, and paste into your agent, all done within 0.5s.
 
 Explaining a misplaced button can take longer than fixing it. Press **Ctrl+Alt+S**, select the area, draw what you mean, and press **Enter**. Paste the image into any chat, document, or issue that accepts images.
 
