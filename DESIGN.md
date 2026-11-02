@@ -57,12 +57,49 @@ Make visual feedback for coding agents faster to communicate: invoke from anywhe
 - Stylus pressure and eraser support.
 - Accessibility and final toolbar placement.
 
-## Proposed implementation direction — not yet confirmed
+## Implementation architecture
 
-- Windows implementation first; preserve a path to macOS and Linux through Qt.
-- Prototype may use PySide6 to validate interaction without a C++ toolchain; this does not establish C++ performance.
-- C++ with Qt 6 / Qt Quick remains the proposed production stack.
-- Small platform-specific adapters for capture, global hotkeys, clipboard export, and window behavior.
+Use a shared Rust core with native implementations for each platform. Share the interface design and interaction behavior, not a bundled cross-platform UI renderer. Implement Windows first.
+
+### Shared core
+
+- Tool state, strokes, arrows, rectangles, and numbered marks.
+- Selection geometry, undo/redo, and the input-action state machine.
+- Drawing commands, style values, and export bounds.
+- Use explicit coordinate conversions; keep OS handles and platform-specific coordinates out of the document model.
+
+### Native platform responsibilities
+
+- Windows, overlays, focus restoration, and tray integration.
+- Capture, permissions, global shortcuts, clipboard formats, and mouse/stylus input.
+- Rendering, text, and image encoding using operating-system facilities.
+- Windows: Rust with Win32 and Direct2D / DirectWrite through the `windows` crate.
+- macOS: native AppKit / Core Graphics integration; exact language bindings to be validated.
+- Linux: native window-system integration and desktop portals; packaging and desktop support baseline to be validated.
+
+### Reasons
+
+- Keep the application small, responsive, clean, genuinely usable, and non-intrusive.
+- Avoid shipping Python, Qt, Chromium, or another large application runtime.
+- Rust keeps ordinary application logic memory-safe; isolate and review necessary unsafe platform API boundaries.
+- Share behavior and visual specifications while respecting platform conventions and permissions.
+- Accept more platform-specific implementation work in exchange for a smaller distribution and direct OS integration.
+- The earlier Python prototype was already responsive in use. Migration is motivated by distribution size and native integration, not a demonstrated Python latency failure.
+
+### Release-size rule
+
+- Target each architecture-specific platform release at **less than 10 MB downloaded and less than 20 MB installed** (decimal MB).
+- Measure the complete application, including bundled libraries and resources, not only the executable.
+- Do not download an additional application runtime during installation. System-provided facilities are allowed; required Linux system packages must be documented.
+- Publish debug symbols separately; avoid bundled fonts and large assets unless essential.
+- Use release optimization, link-time optimization, and symbol stripping where supported; check artifact size automatically when release builds exist.
+- Prove the Windows capture → annotate → clipboard flow within the budget before a full implementation.
+- Prefer separate macOS architecture releases; universal binaries duplicate machine code and may exceed the budget.
+- Define the Linux distribution/dependency baseline before promising portable bundles. A broadly self-contained AppImage may exceed the budget.
+- These are acceptance targets, not measured claims. No native release artifact has established feasibility yet.
+
+### Runtime behavior
+
 - Resident process; keep disk I/O and image encoding out of the drawing path.
 - Capture pixels and editable annotations remain separate until clipboard export.
 - Measure invocation latency, stroke latency, memory use, and clipboard completion on real hardware.
@@ -74,8 +111,8 @@ Make visual feedback for coding agents faster to communicate: invoke from anywhe
 - macOS screen-recording permission and application activation behavior.
 - Linux Wayland capture/global-shortcut portals and compositor-dependent behavior.
 - Image clipboard compatibility, contention, and ownership lifetime.
-- Qt licensing and distribution obligations.
+- Dependency licensing, native API safety, signing, and distribution obligations.
 
 ## Scope
 
-This document records the product design and prototype defaults. The Windows interaction prototype uses PySide6 / Qt Widgets / QPainter; C++ / Qt Quick remains the proposed production direction. Cross-platform integration and production performance have not been validated.
+This document records the product design and native architecture decision. The earlier Python implementation is retained locally only as an interaction reference. The public repository currently contains documentation; native implementation, cross-platform integration, release size, and production performance remain to be validated.
