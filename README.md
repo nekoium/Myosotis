@@ -1,51 +1,87 @@
-# Myosotis — Windows prototype
+# Myosotis
 
-A resident screenshot-and-scribble utility. Capture, mark, press Enter, paste.
+### Talk is cheap, show me the pic.
 
-## Run
+Screenshot, scribble, and paste into your coding agent.
 
-Double-click **Start Myosotis.cmd**. The local Python environment is already installed on this machine.
+Explaining a misplaced button can take longer than fixing it. Press **Ctrl+Alt+S**, select the area, draw what you mean, and hit **Enter**. Your image is on the clipboard, ready to paste into a chat or issue that accepts images.
 
-- **Ctrl+Alt+S**: start capture on the monitor under the pointer.
-- Left drag: screenshot region. Left click: full monitor.
-- Right drag: sized white canvas. Right click: full-monitor white canvas.
-- **1** pen, **2** arrow, **3** rectangle, **4** numbered mark.
-- Draw with the mouse or stylus. Space also activates the tool at the pointer; hold it while moving to draw.
-- Hover on a selection edge for **350 ms**, then drag to resize.
-- **Z** undo, **Y** redo, **Enter** copy and close, **Escape** cancel.
-- Closing the launcher leaves the app resident. Use the tray menu's **Quit** to exit.
+Need to sketch an idea instead? Right-click for a blank canvas, or right-drag to choose its size.
 
-Annotations retain their screen positions when resizing. Cropping clips annotations; expanding the selection reveals them again. The toolbar is not included in the clipboard image.
+**Windows prototype · Runs locally · No account required**
 
-The app does not save or upload captures. Windows clipboard history/sync may retain copied images. Validation scripts can explicitly save synthetic test images under ignored `artifacts/`.
+![Actual Myosotis clipboard output: a pink pen stroke and a numbered annotation on a white canvas.](assets/readme/clipboard-demo.png)
 
-## Setup elsewhere
+*Actual clipboard output from the prototype, created with the pen and numbered-mark tools. The toolbar is excluded from the exported image.*
 
-Requires Windows and Python 3.12+:
+## Made for visual feedback
+
+- **Capture where you work.** A global shortcut opens a frozen view of the monitor under your pointer.
+- **Mark what matters.** Use a pen, arrows, rectangles, or numbered marks without opening a separate editor.
+- **Sketch without a screenshot.** Create a white canvas with a right-click or right-drag.
+- **Keep your hands on the keyboard.** Number keys switch tools; Space uses the current tool at the pointer.
+- **Copy and get back to work.** Enter copies the result and dismisses the overlay. Escape cancels without replacing your clipboard.
+
+Myosotis stays in the system tray between captures. It does not save or upload your screenshots. Windows clipboard history or sync may retain images according to your settings.
+
+## Try it on Windows
+
+Requires **Python 3.12+** and Git. This is a source-based prototype; there is no standalone executable release yet.
+
+Run in PowerShell:
 
 ```powershell
+git clone https://github.com/nekoium/Myosotis.git
+cd Myosotis
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 .venv\Scripts\python.exe myosotis.py
 ```
 
-## Checks
+Once set up, double-click **Start Myosotis.cmd** to launch again.
 
-```powershell
-.venv\Scripts\python.exe -m unittest -v
-```
+Press **Ctrl+Alt+S**, drag a region, draw, press **Enter**, then paste into an application that accepts images. You can also start a capture from the launcher or tray menu. Closing the launcher leaves Myosotis running; choose **Quit** from the tray menu to exit.
 
-## Prototype limits
+## Controls
 
-- PySide6 / Qt Widgets / QPainter; not yet the proposed C++ / Qt Quick production implementation.
-- One active monitor per capture; regions cannot span monitors.
-- Fixed pink ink and stroke width; stylus pressure/eraser not implemented.
-- Fixed shortcut; a conflict is reported in the launcher.
-- Simple toolbar painting is not yet exposed as accessible controls. Keyboard tool selection works.
-- Capture timing in `artifacts/app.log` measures capture plus the request to show the overlay, **not** end-to-end input-to-photon latency.
-- Real mixed-DPI multi-monitor, HDR, protected content, physical stylus hardware, and other operating systems are unvalidated.
-- Qt licensing/distribution review and standalone packaging remain future work.
+### Choose your surface
 
-## Snapshots
+| Input | Result |
+| --- | --- |
+| Left drag | Capture a region |
+| Left click | Capture the monitor under the pointer |
+| Right drag | Create a sized white canvas |
+| Right click | Create a white canvas filling the monitor |
 
-`DESIGN.md` records the design. The first commit preserves the confirmed design before implementation.
+### Annotate and finish
+
+| Input | Action |
+| --- | --- |
+| `1` / `2` / `3` / `4` | Pen / arrow / rectangle / numbered mark |
+| Mouse or stylus | Draw with the selected tool |
+| `Space` | Use the tool at the pointer; hold and move to draw |
+| Hover on an edge for 350 ms, then drag | Resize the selection |
+| `Z` / `Y` | Undo / redo |
+| `Enter` | Copy the image and close |
+| `Esc` | Cancel and close |
+
+Annotations stay in place when you resize. Shrinking clips them from the output; expanding reveals them again.
+
+## Compatibility and limitations
+
+Currently available for Windows. macOS and Linux are planned.
+
+- Captures are limited to one monitor at a time.
+- Ink is pink with a fixed stroke width.
+- The shortcut is fixed to **Ctrl+Alt+S**. If another app has registered it, use the launcher or tray menu.
+- Stylus pressure and eraser tools are not supported.
+- Screen-reader support is limited; tools can be selected with the keyboard.
+- HDR and mixed-DPI multi-monitor setups may have capture issues. Protected content may not be capturable.
+
+## Feedback
+
+[Report a bug or suggest an improvement](https://github.com/nekoium/Myosotis/issues). For capture issues, include your Windows version, display scaling, and steps to reproduce. Check screenshots for private information before posting them.
+
+## License
+
+Myosotis is available under the [MIT License](LICENSE).
