@@ -10,7 +10,7 @@ Need to sketch an idea instead? Right-click for a white canvas, or right-drag to
 
 ## Get started
 
-The native MVP supports **Windows 11 x64**. Download [version 0.0.1](https://github.com/nekoium/Myosotis/releases/tag/v0.0.1), extract the ZIP, and run `Myosotis/myosotis.exe`. It is a portable app using Windows graphics and image facilities; no additional application runtime is required. The executable is currently unsigned. macOS and Linux are planned.
+The native MVP supports **Windows 11 x64**. Download [version 0.1.0](https://github.com/nekoium/Myosotis/releases/tag/v0.1.0), extract the ZIP, and run `Myosotis/myosotis.exe`. It is a portable app using Windows graphics and image facilities; no additional application runtime is required. The executable is currently unsigned. macOS and Linux are planned.
 
 ### Install with Scoop
 
@@ -48,7 +48,7 @@ The toolbar and selection handles stay out of the copied image. If copying fails
 
 ## Controls
 
-The controls below describe current source builds. Version 0.0.1 uses Enter to finish and does not include double-click completion, Ctrl completion, background toggling, or reset.
+Version 0.1.0 adds double-click and Ctrl completion, equivalent Space input, background toggling, and undoable reset.
 
 | Input | Action |
 | --- | --- |
