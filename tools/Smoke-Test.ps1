@@ -14,6 +14,7 @@ public static class NativeSmoke {
     [DllImport("user32.dll")] public static extern bool CloseClipboard();
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hwnd);
+    [DllImport("user32.dll")] public static extern uint GetDpiForWindow(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hwnd);
     [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
     [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
@@ -37,6 +38,10 @@ function Drag([int]$X1,[int]$Y1,[int]$X2,[int]$Y2,[bool]$Blank=$false) {
     Move-Pointer $X2 $Y2
     if ($Blank) { Message 0x205 } else { Message 0x202 }
 }
+function Tap([int]$X,[int]$Y,[bool]$Space=$false) {
+    Move-Pointer $X $Y
+    if ($Space) { Key 0x20 } else { Message 0x201; Message 0x202 }
+}
 function Capture {
     # Exercise the registered system shortcut, rather than calling the application's activation message.
     [NativeSmoke]::keybd_event(0x11,0,0,[UIntPtr]::Zero)
@@ -47,6 +52,8 @@ function Capture {
     [NativeSmoke]::keybd_event(0x11,0,2,[UIntPtr]::Zero)
     Wait-Visible $true
     [void][NativeSmoke]::SetForegroundWindow($script:window)
+    # Visibility changes before activation finishes; do not inject synchronous input during setup.
+    Start-Sleep -Milliseconds 150
 }
 function Copy-Image {
     Key 13
@@ -82,6 +89,120 @@ try {
     Wait-Visible $false
     Assert ([System.Windows.Forms.Clipboard]::GetText() -eq 'Myosotis cancellation sentinel') 'Cancel replaced clipboard'
     Write-Output 'PASS global shortcut, Escape, clipboard preservation'
+
+    # Both first-stage input sources can select and immediately finish a monitor capture.
+    foreach ($spaceInput in @($false, $true)) {
+        Capture
+        Tap 700 450 $spaceInput
+        Assert ([NativeSmoke]::IsWindowVisible($script:window)) 'First tap should select, not finish'
+        Start-Sleep -Milliseconds 80
+        Tap 700 450 $spaceInput
+        Wait-Visible $false
+        $image = [System.Windows.Forms.Clipboard]::GetImage()
+        try { Assert ($image.Width -eq $screen.Width -and $image.Height -eq $screen.Height) 'Direct monitor copy dimensions incorrect' }
+        finally { $image.Dispose() }
+    }
+    Write-Output 'PASS mouse and Space double-tap direct monitor capture'
+
+    # Outside completion, separated sources, slow taps, toolbar exclusion, and Ctrl.
+    Capture
+    Drag 400 300 1200 900 $true
+    Tap 250 200
+    Start-Sleep -Milliseconds 80
+    Tap 250 200
+    Wait-Visible $false
+    $image = [System.Windows.Forms.Clipboard]::GetImage()
+    try {
+        Assert ($image.Width -eq 800 -and $image.Height -eq 600) "Outside double-click changed selection: $($image.Width) x $($image.Height)"
+        Assert ($image.GetPixel(20,20).ToArgb() -eq [Drawing.Color]::White.ToArgb()) 'Outside double-click changed background'
+    } finally { $image.Dispose() }
+    Capture
+    Drag 400 300 1200 900 $true
+    Tap 600 500
+    Tap 600 500 $true
+    Assert ([NativeSmoke]::IsWindowVisible($script:window)) 'Mixed input sources combined into completion'
+    Start-Sleep -Milliseconds 300
+    Tap 600 500 $true
+    Assert ([NativeSmoke]::IsWindowVisible($script:window)) 'Slow taps completed the capture'
+    Key 0x11
+    Wait-Visible $false
+    Write-Output 'PASS outside completion, separate sources, 250 ms cutoff, and immediate Ctrl'
+
+    # A numbered first click is visible immediately, but never enters a completed export.
+    foreach ($spaceInput in @($false, $true)) {
+        Capture
+        Drag 400 300 1200 900 $true
+        Key 0x34
+        Tap 600 500 $spaceInput
+        Start-Sleep -Milliseconds 80
+        Tap 600 500 $spaceInput
+        Wait-Visible $false
+        $image = [System.Windows.Forms.Clipboard]::GetImage()
+        try {
+            for ($x=180; $x -le 220; $x+=5) {
+                for ($y=180; $y -le 220; $y+=5) {
+                    Assert ($image.GetPixel($x,$y).ToArgb() -eq [Drawing.Color]::White.ToArgb()) 'Double-click exported a stray mark'
+                }
+            }
+        } finally { $image.Dispose() }
+    }
+    Write-Output 'PASS mouse and Space numbered-mark rollback'
+
+    Capture
+    Drag 400 300 1200 900 $true
+    Tap 400 600
+    Start-Sleep -Milliseconds 80
+    Tap 400 600
+    Wait-Visible $false
+    Write-Output 'PASS border double-click before resize hover delay'
+
+    Capture
+    Drag 400 300 1200 900 $true
+    $scale = [NativeSmoke]::GetDpiForWindow($script:window) / 96.0
+    $barX = [Math]::Max(12*$scale, [Math]::Min(400, $screen.Width-564*$scale))
+    $barY = if (900+99*$scale -le $screen.Height) { 900+12*$scale } elseif (300-54*$scale -ge 0) { 300-54*$scale } else { 12*$scale }
+    Tap ([int]($barX+46*$scale)) ([int]($barY+21*$scale))
+    Start-Sleep -Milliseconds 80
+    Tap ([int]($barX+46*$scale)) ([int]($barY+21*$scale))
+    Assert ([NativeSmoke]::IsWindowVisible($script:window)) 'Toolbar double-click unexpectedly completed capture'
+    Key 27
+    Write-Output 'PASS toolbar double-click exclusion'
+
+    Capture
+    Drag 400 300 1200 900 $true
+    Key 0x34
+    Assert ([NativeSmoke]::OpenClipboard([IntPtr]::Zero)) 'Could not lock clipboard for double-click recovery check'
+    try {
+        Tap 600 500
+        Start-Sleep -Milliseconds 80
+        Tap 600 500
+        Assert ([NativeSmoke]::IsWindowVisible($script:window)) 'Failed double-click copy discarded capture'
+    } finally { [void][NativeSmoke]::CloseClipboard() }
+    $image = Copy-Image
+    try { Assert ($image.GetPixel(210,200).ToArgb() -eq [Drawing.Color]::White.ToArgb()) 'Failed copy recovery retained a completion mark' }
+    finally { $image.Dispose() }
+    Write-Output 'PASS double-click clipboard failure recovery without stray mark'
+
+    Capture
+    Drag 400 300 1200 900 $true
+    Drag 500 500 700 500
+    Key 0x52
+    Key 0x5A
+    Key 0x59
+    $image = Copy-Image
+    try {
+        Assert ($image.Width -eq 800 -and $image.Height -eq 600) 'Reset changed selection'
+        Assert ($image.GetPixel(200,200).ToArgb() -eq [Drawing.Color]::White.ToArgb()) 'Reset redo retained ink or changed background'
+    } finally { $image.Dispose() }
+    Capture
+    Drag 400 300 1200 900 $true
+    Drag 500 500 700 500
+    Key 0x52
+    Key 0x5A
+    $image = Copy-Image
+    try { Assert (Is-Ink $image 200 200) 'Reset undo failed to restore annotations' }
+    finally { $image.Dispose() }
+    Write-Output 'PASS reset selection/background preservation and undo/redo'
 
     Capture
     Drag 400 300 1200 900 $true
@@ -178,6 +299,26 @@ try {
         $image = Copy-Image
         try { Assert ($image.GetPixel(100,100).ToArgb() -eq [Drawing.Color]::CornflowerBlue.ToArgb()) 'Capture did not freeze the original pixels' }
         finally { $image.Dispose() }
+        Capture
+        Drag 400 300 1200 900
+        Drag 700 600 900 600
+        Move-Pointer 750 550; Message 0x204; Message 0x205
+        Key 0x52; Key 0x5A
+        $image = Copy-Image
+        try {
+            Assert ($image.GetPixel(100,100).ToArgb() -eq [Drawing.Color]::White.ToArgb()) 'Right click did not switch screenshot to white'
+            Assert (Is-Ink $image 400 300) 'Background toggle or reset undo lost annotations'
+        } finally { $image.Dispose() }
+        Capture
+        Drag 400 300 1200 900 $true
+        Drag 700 600 900 600
+        Move-Pointer 750 550; Message 0x204; Message 0x205
+        $image = Copy-Image
+        try {
+            Assert ($image.GetPixel(100,100).ToArgb() -eq [Drawing.Color]::OrangeRed.ToArgb()) 'Right click did not restore captured screenshot'
+            Assert (Is-Ink $image 400 300) 'White to screenshot toggle lost annotations'
+        } finally { $image.Dispose() }
+        Write-Output 'PASS bidirectional background toggle preserving selection and annotations'
         for ($i=0; $i -lt 30 -and [NativeSmoke]::GetForegroundWindow() -ne $fixture.Handle; $i++) {
             [System.Windows.Forms.Application]::DoEvents()
             Start-Sleep -Milliseconds 10

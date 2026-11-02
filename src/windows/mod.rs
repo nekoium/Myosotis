@@ -1,4 +1,6 @@
 mod capture;
+#[cfg(test)]
+mod completion_tests;
 mod render;
 
 use crate::document::{hit_edge, resize, Document, Point, Rect, Tool};
@@ -11,13 +13,38 @@ use ::windows::{
         UI::{HiDpi::*, Input::KeyboardAndMouse::*, Shell::*, WindowsAndMessaging::*},
     },
 };
-use std::{cell::RefCell, mem::size_of, time::Instant};
+use std::{
+    cell::RefCell,
+    mem::size_of,
+    time::{Duration, Instant},
+};
+
+const DOUBLE_CLICK_TIME: Duration = Duration::from_millis(250);
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Input {
+    Mouse,
+    Space,
+}
+#[derive(Clone, Copy)]
+struct Click {
+    point: Point,
+    since: Instant,
+    input: Input,
+}
+impl Click {
+    fn matches(self, point: Point, input: Input, scale: f32) -> bool {
+        self.input == input
+            && self.since.elapsed() <= DOUBLE_CLICK_TIME
+            && (point.x - self.point.x).abs() + (point.y - self.point.y).abs() < 6. * scale
+    }
+}
 
 const TRAY: u32 = WM_APP + 1;
 const HOTKEY: i32 = 0x4D59;
 const CAPTURE: usize = 1;
 const QUIT: usize = 2;
-const HINT: &str = "Z undo   ·   Y redo   ·   Space draw   ·   Hover edge to resize   ·   Enter copy   ·   Esc cancel";
+const HINT: &str = "Z undo · Y redo · R reset · Space draw · Right click background · Hover edge resize · Double click / Ctrl / Enter copy · Esc cancel";
 thread_local! { static APP: RefCell<Option<App>> = const { RefCell::new(None) }; }
 
 #[derive(Clone, Copy)]
@@ -38,6 +65,8 @@ struct App {
     visible: bool,
     pointer: Point,
     gesture: Option<Gesture>,
+    click_start: Option<Click>,
+    pending_click: Option<Click>,
     space: bool,
     hover: Option<(u8, Instant)>,
     hint: String,
@@ -88,6 +117,8 @@ impl App {
         )?);
         self.doc = Document::default();
         self.gesture = None;
+        self.click_start = None;
+        self.pending_click = None;
         self.hover = None;
         self.space = false;
         self.hint.clear();
@@ -102,6 +133,8 @@ impl App {
     }
     unsafe fn close_overlay(&mut self) {
         self.visible = false;
+        self.click_start = None;
+        self.pending_click = None;
         self.gesture = None;
         self.space = false;
         self.doc = Document::default();
@@ -116,7 +149,20 @@ impl App {
         self.pixels.clear();
         self.pixels.shrink_to_fit();
     }
+    fn flush_click(&mut self) {
+        if self.pending_click.take().is_some() {
+            self.doc.finish();
+        }
+    }
+    fn discard_click(&mut self) {
+        if self.pending_click.take().is_some() {
+            // Keep the first click visible but uncommitted until recognition resolves.
+            // Dropping it preserves both earlier annotations and the redo history.
+            self.doc.active = None;
+        }
+    }
     unsafe fn copy(&mut self) {
+        self.flush_click();
         if self.doc.selection.is_none() {
             return;
         }
@@ -134,6 +180,7 @@ impl App {
                 self.close_overlay();
             }
             Err(error) => {
+                eprintln!("Clipboard copy failed: {error}");
                 self.hint = format!("Copy failed; image kept. Press Enter to retry. {error}");
                 self.repaint();
             }
@@ -193,16 +240,45 @@ impl App {
             bottom: y + height,
         })
     }
-    unsafe fn down(&mut self, blank: bool) {
+    unsafe fn down(&mut self, blank: bool, input: Input) {
         if !self.visible || self.gesture.is_some() || self.space {
             return;
         }
         let p = self.cursor();
         self.pointer = p;
+        let toolbar = self.toolbar().is_some_and(|bar| bar.contains(p));
+        let resizing = self.doc.selection.is_some_and(|selection| {
+            self.hover.is_some_and(|(edge, since)| {
+                since.elapsed().as_millis() >= 350
+                    && hit_edge(selection, p, 6. * self.scale) == edge
+            })
+        });
+        if !blank
+            && !toolbar
+            && !resizing
+            && self
+                .pending_click
+                .is_some_and(|click| click.matches(p, input, self.scale))
+        {
+            self.discard_click();
+            self.copy();
+            return;
+        }
+        self.flush_click();
+        self.click_start = None;
         if self.doc.selection.is_none() {
             self.gesture = Some(Gesture::Select { start: p, blank });
+            if !blank {
+                self.click_start = Some(Click {
+                    point: p,
+                    since: Instant::now(),
+                    input,
+                });
+            }
         } else {
             if blank {
+                self.doc.blank = !self.doc.blank;
+                self.repaint();
                 return;
             }
             if let Some(bar) = self.toolbar() {
@@ -218,29 +294,32 @@ impl App {
                     return;
                 }
             }
-            if let Some((edge, since)) = self.hover {
-                if since.elapsed().as_millis() >= 350
-                    && hit_edge(self.doc.selection.unwrap(), p, 6. * self.scale) == edge
-                {
-                    self.gesture = Some(Gesture::Resize {
-                        original: self.doc.selection.unwrap(),
-                        edge,
-                    });
-                }
-            }
-            if self.gesture.is_none() {
+            if resizing {
+                self.gesture = Some(Gesture::Resize {
+                    original: self.doc.selection.unwrap(),
+                    edge: self.hover.unwrap().0,
+                });
+            } else {
                 self.doc.begin(p, self.scale);
-                if self.doc.active.is_some() {
-                    self.gesture = Some(Gesture::Draw);
-                }
+                // Outside clicks still participate in completion, but create no ink.
+                self.gesture = Some(Gesture::Draw);
+                self.click_start = Some(Click {
+                    point: p,
+                    since: Instant::now(),
+                    input,
+                });
             }
         }
         if self.gesture.is_some() {
             SetCapture(self.hwnd);
+            self.space = input == Input::Space;
         }
         self.repaint();
     }
-    unsafe fn up(&mut self, blank: bool) {
+    unsafe fn up(&mut self, blank: bool, input: Input) {
+        if self.space != (input == Input::Space) {
+            return;
+        }
         let p = self.cursor();
         match self.gesture {
             Some(Gesture::Select {
@@ -259,13 +338,20 @@ impl App {
             }
             Some(Gesture::Draw) if !blank => {
                 self.doc.update(p);
-                self.doc.finish();
             }
             Some(Gesture::Resize { original, edge }) if !blank => {
                 self.doc.selection = Some(resize(original, edge, p, self.full, 1.))
             }
             _ => return,
         }
+        self.pending_click = self
+            .click_start
+            .take()
+            .filter(|click| click.matches(p, input, self.scale));
+        if self.pending_click.is_none() {
+            self.doc.finish();
+        }
+        self.space = false;
         self.gesture = None;
         let _ = ReleaseCapture();
         self.repaint();
@@ -273,6 +359,11 @@ impl App {
     unsafe fn moved(&mut self) {
         let p = self.cursor();
         self.pointer = p;
+        if self.click_start.is_some_and(|click| {
+            (p.x - click.point.x).abs() + (p.y - click.point.y).abs() >= 6. * self.scale
+        }) {
+            self.click_start = None;
+        }
         match self.gesture {
             Some(Gesture::Draw) => self.doc.update(p),
             Some(Gesture::Resize { original, edge }) => {
@@ -320,9 +411,19 @@ impl App {
         }
     }
     unsafe fn key(&mut self, key: usize, repeat: bool) {
+        if key == 0x20 {
+            if !repeat {
+                self.down(false, Input::Space);
+            }
+            return;
+        }
+        if key != 0x1B {
+            self.flush_click();
+            self.click_start = None;
+        }
         match key {
             0x1B => self.close_overlay(),
-            0x0D if !repeat => self.copy(),
+            0x0D | 0x11 if !repeat => self.copy(),
             0x31..=0x34 if !repeat => {
                 self.doc.finish();
                 self.doc.tool = Tool::ALL[key - 0x31];
@@ -334,14 +435,11 @@ impl App {
                 let _ = ReleaseCapture();
             }
             0x59 if !repeat => self.doc.redo(),
-            0x20 if !repeat && self.gesture.is_none() && !self.space => {
-                self.doc.begin(self.cursor(), self.scale);
-                if self.doc.active.is_some() {
-                    self.space = true;
-                    if self.doc.tool == Tool::Number {
-                        self.doc.finish();
-                    }
-                }
+            0x52 if !repeat => {
+                self.gesture = None;
+                self.space = false;
+                self.doc.reset();
+                let _ = ReleaseCapture();
             }
             _ => {}
         }
@@ -425,12 +523,18 @@ impl App {
             }
             WM_PAINT => self.paint(),
             WM_ERASEBKGND => return Some(LRESULT(1)),
-            WM_LBUTTONDOWN => self.down(false),
-            WM_RBUTTONDOWN => self.down(true),
-            WM_LBUTTONUP => self.up(false),
-            WM_RBUTTONUP => self.up(true),
+            WM_LBUTTONDOWN => self.down(false, Input::Mouse),
+            WM_RBUTTONDOWN => self.down(true, Input::Mouse),
+            WM_LBUTTONUP => self.up(false, Input::Mouse),
+            WM_RBUTTONUP => self.up(true, Input::Mouse),
             WM_MOUSEMOVE if self.visible => self.moved(),
             WM_TIMER if self.visible => {
+                if self
+                    .pending_click
+                    .is_some_and(|click| click.since.elapsed() > DOUBLE_CLICK_TIME)
+                {
+                    self.flush_click();
+                }
                 self.set_cursor();
             }
             WM_SETCURSOR if self.visible => {
@@ -439,11 +543,11 @@ impl App {
             }
             WM_KEYDOWN if self.visible => self.key(wparam.0, lparam.0 & (1 << 30) != 0),
             WM_KEYUP if wparam.0 == 0x20 && self.space => {
-                self.doc.finish();
-                self.space = false;
-                self.repaint();
+                self.up(false, Input::Space);
             }
             WM_KILLFOCUS if self.visible => {
+                self.flush_click();
+                self.click_start = None;
                 self.doc.finish();
                 self.space = false;
                 self.gesture = None;
@@ -574,6 +678,8 @@ pub fn run() -> Result<()> {
                 visible: false,
                 pointer: Point::default(),
                 gesture: None,
+                click_start: None,
+                pending_click: None,
                 space: false,
                 hover: None,
                 hint: String::new(),

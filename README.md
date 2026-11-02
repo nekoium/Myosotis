@@ -48,16 +48,23 @@ The toolbar and selection handles stay out of the copied image. If copying fails
 
 ## Controls
 
+The controls below describe current source builds. Version 0.0.1 uses Enter to finish and does not include double-click completion, Ctrl completion, background toggling, or reset.
+
 | Input | Action |
 | --- | --- |
 | `Ctrl+Alt+S` | Start a capture or white canvas |
 | `1` / `2` / `3` / `4` | Pen / arrow / rectangle / numbered mark |
 | Left mouse drag | Draw with the selected tool |
-| `Space` | Use the tool at the pointer; hold and move to draw |
+| `Space` | Same as left-click: select or draw at the pointer; hold and move to drag |
+| Double-click / double-tap `Space` | Copy and close; before selection, capture the monitor directly |
+| Right-click after selection | Toggle white / screenshot background, keeping annotations and selection |
 | Hover on an edge, then drag | Resize the selection |
 | `Z` / `Y` | Undo / redo |
-| `Enter` | Copy the image and close |
+| `R` | Clear annotations without changing selection, background, or tool; undo with `Z` |
+| `Ctrl` / `Enter` | Copy the image and close |
 | `Esc` | Cancel and close |
+
+Double-click completion uses a fixed 250 ms window and a movement tolerance of 6 logical pixels, independent of Windows double-click settings. Drawing appears immediately; a qualifying second click removes the first click's temporary mark before copying. Completion works inside and outside the selection, except over toolbar controls or while resizing. Mouse clicks and Space taps are recognized separately.
 
 ## Privacy and limitations
 

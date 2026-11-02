@@ -76,6 +76,15 @@ pub struct Annotation {
     pub width: f32,
 }
 
+enum Undo {
+    Draw,
+    Reset(Vec<Annotation>),
+}
+enum Redo {
+    Draw(Annotation),
+    Reset,
+}
+
 #[derive(Default)]
 pub struct Document {
     pub selection: Option<Rect>,
@@ -83,7 +92,8 @@ pub struct Document {
     pub tool: Tool,
     pub annotations: Vec<Annotation>,
     pub active: Option<Annotation>,
-    redo: Vec<Annotation>,
+    undo: Vec<Undo>,
+    redo: Vec<Redo>,
 }
 impl Document {
     pub fn select(&mut self, bounds: Rect, blank: bool) {
@@ -125,19 +135,41 @@ impl Document {
     pub fn finish(&mut self) {
         if let Some(a) = self.active.take() {
             self.annotations.push(a);
+            self.undo.push(Undo::Draw);
+            self.redo.clear();
+        }
+    }
+    pub fn reset(&mut self) {
+        self.finish();
+        if !self.annotations.is_empty() {
+            self.undo
+                .push(Undo::Reset(std::mem::take(&mut self.annotations)));
             self.redo.clear();
         }
     }
     pub fn undo(&mut self) {
         self.active = None;
-        if let Some(a) = self.annotations.pop() {
-            self.redo.push(a);
+        match self.undo.pop() {
+            Some(Undo::Draw) => self.redo.push(Redo::Draw(self.annotations.pop().unwrap())),
+            Some(Undo::Reset(annotations)) => {
+                self.annotations = annotations;
+                self.redo.push(Redo::Reset);
+            }
+            None => {}
         }
     }
     pub fn redo(&mut self) {
         if self.active.is_none() {
-            if let Some(a) = self.redo.pop() {
-                self.annotations.push(a);
+            match self.redo.pop() {
+                Some(Redo::Draw(annotation)) => {
+                    self.annotations.push(annotation);
+                    self.undo.push(Undo::Draw);
+                }
+                Some(Redo::Reset) => {
+                    self.undo
+                        .push(Undo::Reset(std::mem::take(&mut self.annotations)));
+                }
+                None => {}
             }
         }
     }
@@ -246,6 +278,48 @@ mod tests {
         d.begin(p(20., 20.), 1.);
         d.active = None;
         assert!(d.annotations.is_empty());
+    }
+    #[test]
+    fn reset_is_undoable_and_preserves_canvas_and_tool() {
+        let mut d = Document::default();
+        let selection = Rect::between(p(0., 0.), p(100., 100.));
+        d.select(selection, true);
+        d.tool = Tool::Number;
+        for _ in 0..2 {
+            d.begin(p(20., 20.), 1.);
+            d.finish();
+        }
+        d.reset();
+        assert!(d.annotations.is_empty());
+        assert_eq!(d.selection, Some(selection));
+        assert!(d.blank);
+        assert_eq!(d.tool, Tool::Number);
+        d.undo();
+        assert_eq!(d.annotations.len(), 2);
+        d.undo();
+        assert_eq!(d.annotations.len(), 1);
+        d.redo();
+        d.redo();
+        assert!(d.annotations.is_empty());
+        d.undo();
+        d.begin(p(30., 30.), 1.);
+        d.finish();
+        d.redo();
+        assert_eq!(d.annotations.len(), 3);
+        assert_eq!(d.annotations[2].number, 3);
+    }
+    #[test]
+    fn empty_reset_keeps_redo_and_active_reset_keeps_stroke() {
+        let mut d = Document::default();
+        d.select(Rect::between(p(0., 0.), p(100., 100.)), false);
+        d.begin(p(20., 20.), 1.);
+        d.reset();
+        d.undo();
+        assert_eq!(d.annotations.len(), 1);
+        d.undo();
+        d.reset();
+        d.redo();
+        assert_eq!(d.annotations.len(), 1);
     }
     #[test]
     fn arrow_has_only_two_points_and_pen_retains_path() {
