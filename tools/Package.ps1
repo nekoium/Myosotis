@@ -12,7 +12,10 @@ try {
     Copy-Item 'README.md','LICENSE','THIRD_PARTY_NOTICES.md' $folder -Force
     $installedBytes = (Get-ChildItem $folder -Recurse -File | Measure-Object Length -Sum).Sum
     if ($installedBytes -ge 20000000) { throw "Installed package exceeds 20 MB: $installedBytes bytes" }
-    $archive = Join-Path (Get-Location) 'dist/Myosotis-0.1.0-windows-x64.zip'
+    $metadata = (& cargo metadata --no-deps --format-version 1 | ConvertFrom-Json)
+    if ($LASTEXITCODE -ne 0) { throw 'Could not read package version' }
+    $version = ($metadata.packages | Where-Object name -eq 'myosotis').version
+    $archive = Join-Path (Get-Location) "dist/Myosotis-$version-windows-x64.zip"
     Compress-Archive -Path $folder -DestinationPath $archive -Force
     $downloadBytes = (Get-Item $archive).Length
     if ($downloadBytes -ge 10000000) { throw "Download exceeds 10 MB: $downloadBytes bytes" }

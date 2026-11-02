@@ -10,9 +10,20 @@ Need to sketch an idea instead? Right-click for a white canvas, or right-drag to
 
 ## Get started
 
-The native MVP is available from source for **Windows 11 x64**. It runs as a portable executable using Windows graphics and image facilities; no additional application runtime is required. There is no published, signed download yet. macOS and Linux are planned.
+The native MVP supports **Windows 11 x64**. Download [version 0.0.1](https://github.com/nekoium/Myosotis/releases/tag/v0.0.1), extract the ZIP, and run `Myosotis/myosotis.exe`. It is a portable app using Windows graphics and image facilities; no additional application runtime is required. The executable is currently unsigned. macOS and Linux are planned.
 
-To build it, install [Rust](https://rustup.rs/) with the MSVC toolchain and the Visual Studio Build Tools **Desktop development with C++** workload, including a Windows SDK. From the repository:
+### Install with Scoop
+
+```powershell
+scoop bucket add myosotis https://github.com/nekoium/Myosotis
+scoop install myosotis/myosotis
+```
+
+This uses the project's own Scoop bucket. It creates a Start menu shortcut and a `myosotis` command. To update, run `scoop update myosotis`. Myosotis is not yet listed in the WinGet or Chocolatey community catalogs.
+
+### Build from source
+
+Install [Rust](https://rustup.rs/) with the MSVC toolchain and the Visual Studio Build Tools **Desktop development with C++** workload, including a Windows SDK. From the repository:
 
 ```powershell
 cargo build --locked --release
