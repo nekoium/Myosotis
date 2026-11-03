@@ -10,6 +10,9 @@ try {
     [void][IO.Directory]::CreateDirectory($folder)
     Copy-Item 'target/release/myosotis.exe' $folder -Force
     Copy-Item 'README.md','LICENSE','THIRD_PARTY_NOTICES.md' $folder -Force
+    $images = Join-Path $folder 'docs/images'
+    [void][IO.Directory]::CreateDirectory($images)
+    Copy-Item 'docs/images/myosotis-light.png','docs/images/myosotis-dark.png' $images -Force
     $installedBytes = (Get-ChildItem $folder -Recurse -File | Measure-Object Length -Sum).Sum
     if ($installedBytes -ge 20000000) { throw "Installed package exceeds 20 MB: $installedBytes bytes" }
     $metadata = (& cargo metadata --no-deps --format-version 1 | ConvertFrom-Json)
