@@ -2,6 +2,7 @@ mod capture;
 #[cfg(test)]
 mod completion_tests;
 mod render;
+mod startup;
 
 use crate::{
     document::{hit_edge, resize, Document, Point, Rect, Tool},
@@ -49,6 +50,7 @@ const CAPTURE: usize = 1;
 const QUIT: usize = 2;
 const THEME_DARK: usize = 3;
 const THEME_LIGHT: usize = 4;
+const START_AT_LOGIN: usize = 5;
 const HINT: &str = "Double-click or Ctrl to copy · Z undo · Esc cancel";
 thread_local! { static APP: RefCell<Option<App>> = const { RefCell::new(None) }; }
 
@@ -540,6 +542,20 @@ impl App {
                     let _ = DestroyMenu(themes);
                 }
             }
+            let startup_state = startup::enabled();
+            let (startup_flags, startup_label) = match &startup_state {
+                Ok(true) if startup::disabled_in_windows() => (
+                    MF_STRING | MF_CHECKED,
+                    w!("Start at login (Disabled in Windows)"),
+                ),
+                Ok(true) => (MF_STRING | MF_CHECKED, w!("Start at login")),
+                Ok(false) => (MF_STRING, w!("Start at login")),
+                Err(_) => (
+                    MF_STRING | MF_GRAYED,
+                    w!("Start at login (state unavailable)"),
+                ),
+            };
+            let _ = AppendMenuW(menu, startup_flags, START_AT_LOGIN, startup_label);
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
             let _ = AppendMenuW(menu, MF_STRING, QUIT, w!("Quit Myosotis"));
             let mut p = POINT::default();
@@ -565,10 +581,25 @@ impl App {
                 }
                 THEME_DARK => self.change_theme(Theme::Dark),
                 THEME_LIGHT => self.change_theme(Theme::Light),
+                START_AT_LOGIN => {
+                    // Recheck after the menu closes in case another process changed the entry.
+                    if let Err(error) =
+                        startup::enabled().and_then(|enabled| startup::set_enabled(!enabled))
+                    {
+                        show_error(&format!(
+                            "Could not change Start at login.\n\n{error}\n\nCheck your Windows startup permissions. Reopen the tray menu to see the current registration."
+                        ));
+                    }
+                }
                 QUIT => {
                     let _ = DestroyWindow(self.hwnd);
                 }
                 _ => {}
+            }
+            if let Err(error) = startup_state {
+                show_error(&format!(
+                    "Could not read Start at login. No startup registration was changed.\n\n{error}\n\nCheck your Windows startup permissions."
+                ));
             }
         }
     }

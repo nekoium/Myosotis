@@ -46,3 +46,11 @@ The resident process reported **74.2 MiB working set and 271 handles** after the
 Physical input-to-visible-stroke latency has not been instrumented. Mouse drawing was visually checked, but real stylus hardware, pressure, erasers, multiple monitors with mixed DPI or negative origins, HDR, protected content, secure desktops, device loss, Explorer restart recovery, screen readers, and extended sessions remain unvalidated. Pressure/erasers and individual toolbar accessibility controls are not implemented. macOS and Linux frontends do not exist yet.
 
 No public release, code signing, installer, auto-update, or startup registration was performed. See [CONTRIBUTING.md](../CONTRIBUTING.md) for repeatable checks and packaging.
+
+## Version 0.1.2 release checks
+
+Formatting, Clippy with warnings denied, and all 13 unit tests passed. Startup tests use isolated temporary HKCU keys, never the real Run or StartupApproved entries. They cover absent registration without creating a key, quoted Unicode/spaced executable paths, persistence across handles, denied writes and deletion, preservation of unrelated entries, and recognized versus malformed/unknown approval records. Windows approval data is read-only and detected best-effort; its format is undocumented.
+
+The Windows x64 release executable reports file and product version `0.1.2`. The portable package measured 344,054 bytes downloaded and 635,008 bytes installed. Extraction was checked against the staging files using SHA-256. Release staging was isolated under `.tmp/` to avoid replacing the running executable or the existing `dist/Myosotis` folder. No real startup registration or Windows approval state was changed.
+
+Native tray/Task Manager interaction and actual login were not checked for this release. The earlier capture and theme integration evidence above remains from its original builds; it was not rerun for 0.1.2.

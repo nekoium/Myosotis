@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
 PackageIdentifier: nekoium.Myosotis
-PackageVersion: 0.1.1
+PackageVersion: 0.1.2
 PackageLocale: en-US
 Publisher: nekoium
 PublisherUrl: https://github.com/nekoium
@@ -8,7 +8,7 @@ PublisherSupportUrl: https://github.com/nekoium/Myosotis/issues
 PackageName: Myosotis
 PackageUrl: https://github.com/nekoium/Myosotis
 License: MIT
-LicenseUrl: https://github.com/nekoium/Myosotis/blob/v0.1.1/LICENSE
+LicenseUrl: https://github.com/nekoium/Myosotis/blob/v0.1.2/LICENSE
 ShortDescription: Capture, scribble, and paste into your coding agent.
 Description: A small native Windows screenshot annotation app with a global shortcut, white canvases, pen, arrows, rectangles, numbered marks, and clipboard output.
 Tags:
@@ -16,6 +16,6 @@ Tags:
 - annotation
 - clipboard
 - drawing
-ReleaseNotesUrl: https://github.com/nekoium/Myosotis/releases/tag/v0.1.1
+ReleaseNotesUrl: https://github.com/nekoium/Myosotis/releases/tag/v0.1.2
 ManifestType: defaultLocale
 ManifestVersion: 1.10.0

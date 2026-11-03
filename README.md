@@ -4,13 +4,21 @@
 
 Myosotis is a blazing fast screenshot widget based on Rust, human- and agent-friendly, no hassle, no clutters. Screenshot, scribble, and paste into your agent, all done within 0.5s.
 
-Explaining a misplaced button can take longer than fixing it. Press **Ctrl+Alt+S**, select the area, draw what you mean, and press **Enter**. Paste the image into any chat, document, or issue that accepts images.
+Explaining a misplaced button can take longer than fixing it. Press **Ctrl+Alt+S**, select the area, draw what you mean, and **double-click** or press **Ctrl** to copy. Paste the image into any chat, document, or issue that accepts images.
 
 Need to sketch an idea instead? Right-click for a white canvas, or right-drag to choose its size.
 
+## See it in use
+
+The default dark toolbar stays consistent across light and dark screenshots. These examples show the pen, arrow, rectangle, and numbered-mark tools.
+
+| Light screenshot | Dark screenshot |
+| --- | --- |
+| ![Myosotis annotating a light screenshot with its compact dark toolbar](docs/images/myosotis-light.png) | ![Myosotis annotating a dark screenshot with its compact dark toolbar](docs/images/myosotis-dark.png) |
+
 ## Get started
 
-The native MVP supports **Windows 11 x64**. Download [version 0.1.1](https://github.com/nekoium/Myosotis/releases/tag/v0.1.1), extract the ZIP, and run `Myosotis/myosotis.exe`. It is a portable app using Windows graphics and image facilities; no additional application runtime is required. The executable is currently unsigned. macOS and Linux are planned.
+The native MVP supports **Windows 11 x64**. Download [version 0.1.2](https://github.com/nekoium/Myosotis/releases/tag/v0.1.2), extract the ZIP, and run `Myosotis/myosotis.exe`. It is a portable app using Windows graphics and image facilities; no additional application runtime is required. The executable is currently unsigned. macOS and Linux are planned.
 
 ### Install with Scoop
 
@@ -30,7 +38,7 @@ cargo build --locked --release
 .\target\release\myosotis.exe --capture
 ```
 
-Myosotis stays in the notification area after you copy or cancel. Use **Ctrl+Alt+S** to capture again. Click its flower icon to capture, or right-click it for theme options and Quit. If Windows hides the icon, look under the notification area's overflow arrow.
+Myosotis stays in the notification area after you copy or cancel. Use **Ctrl+Alt+S** to capture again. Click its flower icon to capture, or right-click it for theme options, **Start at login**, and Quit. If Windows hides the icon, look under the notification area's overflow arrow.
 
 Launching the executable again opens the resident app. The shortcut is fixed for this MVP; if another app owns Ctrl+Alt+S, Myosotis reports the conflict.
 
@@ -40,15 +48,17 @@ Right-click the notification-area icon, open **Theme**, and choose **Dark** or *
 
 Myosotis saves your choice in `%LOCALAPPDATA%\Myosotis\settings.toml` when you change the theme. If saving fails, the theme still applies for the current session and Myosotis reports the problem. Missing or invalid settings use Dark at startup.
 
-To reset preferences, quit Myosotis and delete `%LOCALAPPDATA%\Myosotis`. This folder remains if you remove the portable executable; you can delete it yourself. No registry settings are created.
+To reset preferences, quit Myosotis and delete `%LOCALAPPDATA%\Myosotis`. This folder remains if you remove the portable executable; you can delete it yourself. Theme preferences do not use the registry.
 
-## See it in use
+### Start at login
 
-The default dark toolbar stays consistent across light and dark screenshots. These examples show the pen, arrow, rectangle, and numbered-mark tools.
+Automatic startup is **off by default**. Right-click the notification-area icon and select **Start at login** to enable it. A check mark means the startup entry exists. Select it again to remove the entry. The menu reads the registration each time it opens, including after restarting Myosotis.
 
-| Light screenshot | Dark screenshot |
-| --- | --- |
-| ![Myosotis annotating a light screenshot with its compact dark toolbar](docs/images/myosotis-light.png) | ![Myosotis annotating a dark screenshot with its compact dark toolbar](docs/images/myosotis-dark.png) |
+If the entry exists but Windows marks it disabled, the menu shows **Start at login (Disabled in Windows)** and keeps the check mark. You can still select it to remove the registration. To allow automatic launch without removing registration, re-enable Myosotis in **Task Manager → Startup apps**. Myosotis does not override that Windows choice. The annotation is never shown without registration; if Windows' disabled state cannot be detected, the usual label remains.
+
+This creates only a per-user `Myosotis` value under `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`; no administrator rights are required. Login starts Myosotis quietly in the notification area. If Windows blocks reading or changing the entry, Myosotis reports the error; an unreadable state is shown as unavailable rather than unchecked.
+
+The entry points to the executable's current location. Turn **Start at login** off before moving or deleting a portable copy. After moving it, run the new copy and enable the option again. Resetting theme preferences does not remove startup registration. Windows startup controls or organizational policy can still prevent the registered app from launching.
 
 ## Capture and sketch
 
@@ -61,7 +71,7 @@ The screen freezes when you invoke Myosotis.
 - **Double-click**, press **Ctrl** on its own, press **Enter**, or click the **Copy** button to copy and close. Then paste into your chat or document with **Ctrl+V**.
 - Press **Escape** or click the toolbar's **Cancel** button to cancel and keep your previous clipboard.
 
-The toolbar and selection handles stay out of the copied image. If copying fails because another app holds the clipboard, your drawing stays open so you can press Enter to retry.
+The toolbar and selection handles stay out of the copied image. If copying fails because another app holds the clipboard, your drawing stays open so you can double-click, press Ctrl, or click Copy to retry.
 
 ## Controls
 

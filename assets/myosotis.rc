@@ -2,8 +2,8 @@
 1 24 "myosotis.manifest"
 
 1 VERSIONINFO
- FILEVERSION 0,1,1,0
- PRODUCTVERSION 0,1,1,0
+ FILEVERSION 0,1,2,0
+ PRODUCTVERSION 0,1,2,0
  FILETYPE 1
 BEGIN
  BLOCK "StringFileInfo"
@@ -12,11 +12,11 @@ BEGIN
   BEGIN
    VALUE "CompanyName", "Myosotis contributors\0"
    VALUE "FileDescription", "Myosotis - Capture, scribble, and paste\0"
-   VALUE "FileVersion", "0.1.1\0"
+   VALUE "FileVersion", "0.1.2\0"
    VALUE "InternalName", "myosotis\0"
    VALUE "OriginalFilename", "myosotis.exe\0"
    VALUE "ProductName", "Myosotis\0"
-   VALUE "ProductVersion", "0.1.1\0"
+   VALUE "ProductVersion", "0.1.2\0"
    VALUE "LegalCopyright", "MIT License\0"
   END
  END

@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
 PackageIdentifier: nekoium.Myosotis
-PackageVersion: 0.1.1
+PackageVersion: 0.1.2
 Platform:
 - Windows.Desktop
 MinimumOSVersion: 10.0.22000.0
@@ -10,10 +10,10 @@ NestedInstallerFiles:
 - RelativeFilePath: Myosotis\myosotis.exe
   PortableCommandAlias: myosotis
 UpgradeBehavior: uninstallPrevious
-ReleaseDate: 2026-11-03
+ReleaseDate: 2026-11-04
 Installers:
 - Architecture: x64
-  InstallerUrl: https://github.com/nekoium/Myosotis/releases/download/v0.1.1/Myosotis-0.1.1-windows-x64.zip
-  InstallerSha256: 1ADC667E69665085D78081F7BEF098F5654206B33245CF0A91FA3F52530DAE35
+  InstallerUrl: https://github.com/nekoium/Myosotis/releases/download/v0.1.2/Myosotis-0.1.2-windows-x64.zip
+  InstallerSha256: 997833BFECCF7985E82E0C3F0A870D99D45B6FC608E1D234CB5AC255E946D358
 ManifestType: installer
 ManifestVersion: 1.10.0
