@@ -113,6 +113,26 @@ Use a shared Rust core with native implementations for each platform. Share the 
 - Image clipboard compatibility, contention, and ownership lifetime.
 - Dependency licensing, native API safety, signing, and distribution obligations.
 
+## Selected interface direction
+
+The finalized Windows interface uses a compact dark rectangular toolbar with rounded corners, no perimeter outline, and no shadow. Six 40-DIP cells contain vector icons for pen, arrow, rectangle, numbered mark, Copy, and Cancel. Neutral fills identify the selected tool and hovered controls; blue emphasizes Copy. The existing guidance surface uses the same dark treatment, a shorter persistent hint, and contextual tool descriptions on hover. Keyboard shortcuts, completion gestures, and toolbar placement remain unchanged.
+
+Annotation defaults use coral ink, rounded pen and arrow caps, finer arrows and rectangle outlines, and compact numbered markers. Overlay rendering and clipboard export share these defaults. No configuration, dependencies, animations, or background sampling are added.
+
+This direction was selected after comparing Material, light macOS-inspired, and dark rectangular candidates with and without an outline. See [the design comparison](docs/DESIGN-DIRECTIONS.md) for references, verification, and remaining accessibility and display checks. This is a native Windows design; it does not add macOS support.
+
+## Experience refinement goals
+
+Myosotis should make the capture → annotate → copy workflow immediately understandable, with minimal reading and configuration. These goals guide future work; they do not describe features already implemented.
+
+- Users should be able to finish a capture while keeping the left hand in its keyboard working area and the right hand on the mouse, without reaching for Enter. Double-click completion is a candidate; single-click recognition and unintended drawing actions need discussion. Keyboard shortcuts remain available.
+- Controls should communicate their purpose with minimal on-screen text. Use recognizable icons where they improve clarity; retain labels where they prevent ambiguity. Preserve discoverability and accessible names.
+- Annotations should look clean, attractive, and coherent with the tool's visual design. Explore line-weight variation and color treatment for aesthetic quality while keeping the default workflow free of configuration.
+- Interface quality should come from legibility, consistent spacing, alignment, and clear control states. Decorative shadows and animations are not a current priority.
+- Blazing-fast invocation, drawing, and completion are non-negotiable. Refinements must preserve responsiveness and the existing release-size budget.
+
+Unresolved problems, candidate approaches, and implementation discussion belong in GitHub Issues. Start with the [experience refinement tracker](https://github.com/nekoium/Myosotis/issues/5). Agreed interaction decisions belong in this document. See [CONTRIBUTING.md](CONTRIBUTING.md#ideas-and-product-decisions) for the issue workflow.
+
 ## Scope
 
 This document records the product design and native architecture decision. The Windows MVP now implements the capture → annotate → clipboard workflow, resident tray integration, and the interaction defaults above. The document model is platform-independent Rust; Windows API calls are isolated in `src/windows/`. Release builds statically link the C runtime and embed an application icon, version information, and a per-monitor DPI awareness manifest. `tools/Package.ps1` builds the complete portable package and enforces the download and installed size budgets.

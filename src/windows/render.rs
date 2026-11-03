@@ -12,6 +12,17 @@ use ::windows::{
     },
 };
 
+pub const TOOLBAR_CELL: f32 = 40.;
+pub const TOOLBAR_HEIGHT: f32 = 44.;
+pub const TOOLBAR_LABELS: [&str; 6] = [
+    "Pen · 1 · Hold Space to draw",
+    "Arrow · 2 · Drag to point",
+    "Rectangle · 3 · Drag to outline",
+    "Numbered mark · 4 · Click to place",
+    "Copy image and close · Ctrl or Enter",
+    "Cancel capture · Esc",
+];
+
 fn color(r: f32, g: f32, b: f32, a: f32) -> D2D1_COLOR_F {
     D2D1_COLOR_F { r, g, b, a }
 }
@@ -45,6 +56,7 @@ pub struct Renderer {
     small: IDWriteTextFormat,
     number: IDWriteTextFormat,
     scale: f32,
+    rounded_stroke: ID2D1StrokeStyle,
 }
 impl Renderer {
     pub unsafe fn new(
@@ -95,6 +107,15 @@ impl Renderer {
         )?;
         number.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
         number.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+        let rounded_stroke = factory.CreateStrokeStyle(
+            &D2D1_STROKE_STYLE_PROPERTIES {
+                startCap: D2D1_CAP_STYLE_ROUND,
+                endCap: D2D1_CAP_STYLE_ROUND,
+                lineJoin: D2D1_LINE_JOIN_ROUND,
+                ..Default::default()
+            },
+            None,
+        )?;
         Ok(Self {
             factory,
             target,
@@ -102,6 +123,7 @@ impl Renderer {
             small,
             number,
             scale,
+            rounded_stroke,
         })
     }
     unsafe fn text(
@@ -142,7 +164,7 @@ impl Renderer {
             if doc.blank {
                 target.FillRectangle(&rect(selection), &white);
             }
-            let ink = target.CreateSolidColorBrush(&color(0.96, 0.22, 0.30, 1.), None)?;
+            let ink = target.CreateSolidColorBrush(&color(0.94, 0.24, 0.26, 1.), None)?;
             for a in doc.annotations.iter().chain(doc.active.iter()) {
                 self.annotation(target, a, &ink, &white);
             }
@@ -162,7 +184,13 @@ impl Renderer {
         match a.tool {
             Tool::Pen => {
                 for pair in a.points.windows(2) {
-                    target.DrawLine(point(pair[0]), point(pair[1]), ink, a.width, None);
+                    target.DrawLine(
+                        point(pair[0]),
+                        point(pair[1]),
+                        ink,
+                        a.width,
+                        Some(&self.rounded_stroke),
+                    );
                 }
                 for p in &a.points {
                     target.FillEllipse(
@@ -176,7 +204,13 @@ impl Renderer {
                 }
             }
             Tool::Arrow => {
-                target.DrawLine(point(start), point(end), ink, a.width, None);
+                target.DrawLine(
+                    point(start),
+                    point(end),
+                    ink,
+                    a.width * 0.8,
+                    Some(&self.rounded_stroke),
+                );
                 let angle = (end.y - start.y).atan2(end.x - start.x);
                 let length = (15. * self.scale).min(start.distance(end) * 0.45);
                 for offset in [-0.5_f32, 0.5] {
@@ -187,16 +221,23 @@ impl Renderer {
                             end.y - length * (angle + offset).sin(),
                         )),
                         ink,
-                        a.width,
-                        None,
+                        a.width * 0.8,
+                        Some(&self.rounded_stroke),
                     );
                 }
             }
-            Tool::Rectangle => {
-                target.DrawRectangle(&rect(Rect::between(start, end)), ink, a.width, None)
-            }
+            Tool::Rectangle => target.DrawRoundedRectangle(
+                &D2D1_ROUNDED_RECT {
+                    rect: rect(Rect::between(start, end)),
+                    radiusX: 3. * self.scale,
+                    radiusY: 3. * self.scale,
+                },
+                ink,
+                a.width * 0.6,
+                None,
+            ),
             Tool::Number => {
-                let radius = 13. * self.scale;
+                let radius = 11. * self.scale;
                 target.FillEllipse(
                     &D2D1_ELLIPSE {
                         point: point(start),
@@ -218,22 +259,107 @@ impl Renderer {
             }
         }
     }
+    unsafe fn icon(
+        &self,
+        target: &ID2D1RenderTarget,
+        index: usize,
+        cell: Rect,
+        brush: &ID2D1SolidColorBrush,
+    ) {
+        let size = 20. * self.scale;
+        let x = (cell.left + cell.right - size) / 2.;
+        let y = (cell.top + cell.bottom - size) / 2.;
+        let p = |a: f32, b: f32| D2D_POINT_2F {
+            x: x + a * size / 24.,
+            y: y + b * size / 24.,
+        };
+        let line = |a, b, c, d| {
+            target.DrawLine(
+                p(a, b),
+                p(c, d),
+                brush,
+                1.8 * self.scale,
+                Some(&self.rounded_stroke),
+            );
+        };
+        let box_at = |a, b, c, d| {
+            let start = p(a, b);
+            let end = p(c, d);
+            target.DrawRoundedRectangle(
+                &D2D1_ROUNDED_RECT {
+                    rect: D2D_RECT_F {
+                        left: start.x,
+                        top: start.y,
+                        right: end.x,
+                        bottom: end.y,
+                    },
+                    radiusX: 1.5 * self.scale,
+                    radiusY: 1.5 * self.scale,
+                },
+                brush,
+                1.8 * self.scale,
+                None,
+            );
+        };
+        match index {
+            0 => {
+                line(4., 16., 16., 4.);
+                line(16., 4., 20., 8.);
+                line(20., 8., 8., 20.);
+                line(8., 20., 4., 20.);
+                line(4., 20., 4., 16.);
+                line(13., 7., 17., 11.);
+            }
+            1 => {
+                line(5., 19., 19., 5.);
+                line(9., 5., 19., 5.);
+                line(19., 5., 19., 15.);
+            }
+            2 => box_at(4., 5., 20., 19.),
+            3 => {
+                target.DrawEllipse(
+                    &D2D1_ELLIPSE {
+                        point: p(12., 12.),
+                        radiusX: size * 0.39,
+                        radiusY: size * 0.39,
+                    },
+                    brush,
+                    1.8 * self.scale,
+                    None,
+                );
+                line(10., 9., 12., 7.);
+                line(12., 7., 12., 17.);
+                line(9., 17., 15., 17.);
+            }
+            4 => {
+                box_at(8., 8., 20., 21.);
+                line(16., 4., 4., 4.);
+                line(4., 4., 4., 16.);
+            }
+            5 => {
+                line(6., 6., 18., 18.);
+                line(6., 18., 18., 6.);
+            }
+            _ => {}
+        }
+    }
     pub unsafe fn paint(
         &self,
         doc: &Document,
         full: Rect,
         selecting: Option<Rect>,
         toolbar: Option<Rect>,
+        pointer: Point,
         hint: &str,
     ) -> Result<()> {
         let target: ID2D1RenderTarget = self.target.cast()?;
         target.BeginDraw();
         let result = (|| {
             self.image(&target, &self.bitmap, doc, full)?;
-            let shade = target.CreateSolidColorBrush(&color(0.025, 0.035, 0.065, 0.52), None)?;
-            let accent = target.CreateSolidColorBrush(&color(0.55, 0.67, 1., 1.), None)?;
-            let white = target.CreateSolidColorBrush(&color(0.94, 0.95, 0.98, 1.), None)?;
-            let panel = target.CreateSolidColorBrush(&color(0.065, 0.075, 0.105, 1.), None)?;
+            let shade = target.CreateSolidColorBrush(&color(0.02, 0.02, 0.02, 0.38), None)?;
+            let accent = target.CreateSolidColorBrush(&color(0.16, 0.43, 0.83, 1.), None)?;
+            let white = target.CreateSolidColorBrush(&color(0.94, 0.94, 0.95, 1.), None)?;
+            let panel = target.CreateSolidColorBrush(&color(0.14, 0.14, 0.15, 1.), None)?;
             if let Some(r) = doc.selection.or(selecting) {
                 for outside in [
                     Rect {
@@ -282,54 +408,53 @@ impl Renderer {
                 target.FillRoundedRectangle(
                     &D2D1_ROUNDED_RECT {
                         rect: rect(bar),
-                        radiusX: 9. * self.scale,
-                        radiusY: 9. * self.scale,
+                        radiusX: 10. * self.scale,
+                        radiusY: 10. * self.scale,
                     },
                     &panel,
                 );
-                let labels = [
-                    "1  Pen",
-                    "2  Arrow",
-                    "3  Box",
-                    "4  Number",
-                    "Copy ↵",
-                    "Cancel",
-                ];
-                for (index, label) in labels.iter().enumerate() {
+                let hover = target.CreateSolidColorBrush(&color(0.22, 0.22, 0.24, 1.), None)?;
+                let selected_fill =
+                    target.CreateSolidColorBrush(&color(0.32, 0.32, 0.35, 1.), None)?;
+                let primary = target.CreateSolidColorBrush(&color(0.12, 0.36, 0.75, 1.), None)?;
+                for index in 0..6 {
                     let cell = Rect {
-                        left: bar.left + index as f32 * 92. * self.scale,
-                        right: bar.left + (index + 1) as f32 * 92. * self.scale,
+                        left: bar.left + index as f32 * TOOLBAR_CELL * self.scale,
+                        right: bar.left + (index + 1) as f32 * TOOLBAR_CELL * self.scale,
                         ..bar
                     };
-                    if index < 4 && doc.tool == Tool::ALL[index] {
+                    let selected = index < 4 && doc.tool == Tool::ALL[index];
+                    if selected || index == 4 || cell.contains(pointer) {
                         target.FillRoundedRectangle(
                             &D2D1_ROUNDED_RECT {
                                 rect: rect(Rect {
                                     left: cell.left + 4. * self.scale,
                                     right: cell.right - 4. * self.scale,
-                                    top: cell.top + 4. * self.scale,
-                                    bottom: cell.bottom - 4. * self.scale,
+                                    top: cell.top + 6. * self.scale,
+                                    bottom: cell.bottom - 6. * self.scale,
                                 }),
-                                radiusX: 5. * self.scale,
-                                radiusY: 5. * self.scale,
+                                radiusX: 6. * self.scale,
+                                radiusY: 6. * self.scale,
                             },
-                            &accent,
+                            if index == 4 {
+                                &primary
+                            } else if selected {
+                                &selected_fill
+                            } else {
+                                &hover
+                            },
                         );
                     }
-                    self.text(
-                        &target,
-                        label,
-                        Rect {
-                            left: cell.left + 10. * self.scale,
-                            ..cell
-                        },
-                        if index < 4 && doc.tool == Tool::ALL[index] {
-                            &panel
-                        } else {
-                            &white
-                        },
-                        false,
-                    );
+                    if index == 4 {
+                        target.DrawLine(
+                            point(Point::new(cell.left, bar.top + 16. * self.scale)),
+                            point(Point::new(cell.left, bar.bottom - 16. * self.scale)),
+                            &hover,
+                            self.scale,
+                            None,
+                        );
+                    }
+                    self.icon(&target, index, cell, &white);
                 }
             }
             if !hint.is_empty() {
@@ -337,15 +462,22 @@ impl Renderer {
                 let (x, y) = if let Some(bar) = toolbar {
                     (
                         bar.left,
-                        (bar.bottom + 8. * self.scale).min(full.bottom - 36. * self.scale),
+                        if bar.bottom + 40. * self.scale <= full.bottom {
+                            bar.bottom + 8. * self.scale
+                        } else {
+                            (bar.top - 40. * self.scale).max(full.top)
+                        },
                     )
                 } else {
                     (24. * self.scale, 24. * self.scale)
                 };
+                let width = (hint.chars().count() as f32 * 7.5 + 24.) * self.scale;
+                let width = width.min((full.width() - 16. * self.scale).max(self.scale));
+                let x = x.min(full.right - width - 8. * self.scale).max(full.left);
                 let area = Rect {
                     left: x,
                     top: y,
-                    right: (x + 740. * self.scale).min(full.right - 8.),
+                    right: x + width,
                     bottom: y + 32. * self.scale,
                 };
                 target.FillRoundedRectangle(

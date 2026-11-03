@@ -1,4 +1,8 @@
-param([string]$Exe = "$PSScriptRoot/../dist/Myosotis/myosotis.exe")
+param(
+    [string]$Exe = "$PSScriptRoot/../dist/Myosotis/myosotis.exe",
+    [float]$ToolbarCell = 40,
+    [float]$ToolbarHeight = 44
+)
 # Interactive Windows check: takes pointer/focus and replaces the clipboard with test content.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
@@ -159,11 +163,11 @@ try {
     Capture
     Drag 400 300 1200 900 $true
     $scale = [NativeSmoke]::GetDpiForWindow($script:window) / 96.0
-    $barX = [Math]::Max(12*$scale, [Math]::Min(400, $screen.Width-564*$scale))
-    $barY = if (900+99*$scale -le $screen.Height) { 900+12*$scale } elseif (300-54*$scale -ge 0) { 300-54*$scale } else { 12*$scale }
-    Tap ([int]($barX+46*$scale)) ([int]($barY+21*$scale))
+    $barX = [Math]::Max(12*$scale, [Math]::Min(400, $screen.Width-(6*$ToolbarCell+12)*$scale))
+    $barY = if (900+($ToolbarHeight+57)*$scale -le $screen.Height) { 900+12*$scale } elseif (300-($ToolbarHeight+12)*$scale -ge 0) { 300-($ToolbarHeight+12)*$scale } else { 12*$scale }
+    Tap ([int]($barX+$ToolbarCell/2*$scale)) ([int]($barY+$ToolbarHeight/2*$scale))
     Start-Sleep -Milliseconds 80
-    Tap ([int]($barX+46*$scale)) ([int]($barY+21*$scale))
+    Tap ([int]($barX+$ToolbarCell/2*$scale)) ([int]($barY+$ToolbarHeight/2*$scale))
     Assert ([NativeSmoke]::IsWindowVisible($script:window)) 'Toolbar double-click unexpectedly completed capture'
     Key 27
     Write-Output 'PASS toolbar double-click exclusion'

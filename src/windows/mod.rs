@@ -44,7 +44,7 @@ const TRAY: u32 = WM_APP + 1;
 const HOTKEY: i32 = 0x4D59;
 const CAPTURE: usize = 1;
 const QUIT: usize = 2;
-const HINT: &str = "Z undo · Y redo · R reset · Space draw · Right click background · Hover edge resize · Double click / Ctrl / Enter copy · Esc cancel";
+const HINT: &str = "Double-click or Ctrl to copy · Z undo · Esc cancel";
 thread_local! { static APP: RefCell<Option<App>> = const { RefCell::new(None) }; }
 
 #[derive(Clone, Copy)]
@@ -219,8 +219,8 @@ impl App {
             (selection.left + selection.right) / 2.,
             (selection.top + selection.bottom) / 2.,
         ));
-        let width = 552. * self.scale;
-        let height = 42. * self.scale;
+        let width = render::TOOLBAR_CELL * 6. * self.scale;
+        let height = render::TOOLBAR_HEIGHT * self.scale;
         let gap = 12. * self.scale;
         let x = selection.left.clamp(
             monitor.left + gap,
@@ -283,7 +283,7 @@ impl App {
             }
             if let Some(bar) = self.toolbar() {
                 if bar.contains(p) {
-                    let item = ((p.x - bar.left) / (92. * self.scale)) as usize;
+                    let item = ((p.x - bar.left) / (render::TOOLBAR_CELL * self.scale)) as usize;
                     match item {
                         0..=3 => self.doc.tool = Tool::ALL[item],
                         4 => self.copy(),
@@ -459,17 +459,32 @@ impl App {
             } else {
                 None
             };
+            let toolbar_label = self.toolbar().and_then(|bar| {
+                bar.contains(self.pointer).then(|| {
+                    let item = ((self.pointer.x - bar.left) / (render::TOOLBAR_CELL * self.scale))
+                        as usize;
+                    render::TOOLBAR_LABELS.get(item).copied().unwrap_or("")
+                })
+            });
             let hint = if !self.hint.is_empty() {
                 self.hint.as_str()
+            } else if let Some(label) = toolbar_label {
+                label
             } else if self.doc.selection.is_some() {
                 HINT
             } else {
-                "MYOSOTIS   ·   Left drag: screenshot   ·   Right drag: white canvas   ·   Click: monitor   ·   Esc: cancel"
+                "Myosotis · Drag to capture · Right-drag for white canvas · Click for monitor · Esc cancel"
             };
-            let result = self
-                .renderer
-                .as_ref()
-                .map(|r| r.paint(&self.doc, self.full, selecting, self.toolbar(), hint));
+            let result = self.renderer.as_ref().map(|r| {
+                r.paint(
+                    &self.doc,
+                    self.full,
+                    selecting,
+                    self.toolbar(),
+                    self.pointer,
+                    hint,
+                )
+            });
             if let Some(Err(error)) = result {
                 self.hint = format!("Display error: {error}. Escape and capture again.");
             }
