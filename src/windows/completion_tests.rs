@@ -13,6 +13,7 @@ fn app() -> App {
         previous: HWND::default(),
         doc: Document::default(),
         renderer: None,
+        theme: Theme::Dark,
         pixels: vec![],
         origin: POINT::default(),
         full: Rect::default(),

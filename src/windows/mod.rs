@@ -3,7 +3,10 @@ mod capture;
 mod completion_tests;
 mod render;
 
-use crate::document::{hit_edge, resize, Document, Point, Rect, Tool};
+use crate::{
+    document::{hit_edge, resize, Document, Point, Rect, Tool},
+    settings::{self, Theme},
+};
 use ::windows::{
     core::*,
     Win32::{
@@ -44,6 +47,8 @@ const TRAY: u32 = WM_APP + 1;
 const HOTKEY: i32 = 0x4D59;
 const CAPTURE: usize = 1;
 const QUIT: usize = 2;
+const THEME_DARK: usize = 3;
+const THEME_LIGHT: usize = 4;
 const HINT: &str = "Double-click or Ctrl to copy · Z undo · Esc cancel";
 thread_local! { static APP: RefCell<Option<App>> = const { RefCell::new(None) }; }
 
@@ -58,6 +63,7 @@ struct App {
     previous: HWND,
     doc: Document,
     renderer: Option<render::Renderer>,
+    theme: Theme,
     pixels: Vec<u8>,
     origin: POINT,
     full: Rect,
@@ -114,6 +120,7 @@ impl App {
             height as u32,
             &self.pixels,
             self.scale,
+            self.theme,
         )?);
         self.doc = Document::default();
         self.gesture = None;
@@ -491,6 +498,21 @@ impl App {
         }
         let _ = EndPaint(self.hwnd, &ps);
     }
+    unsafe fn change_theme(&mut self, theme: Theme) {
+        if self.theme == theme {
+            return;
+        }
+        self.theme = theme;
+        if let Some(renderer) = &mut self.renderer {
+            renderer.theme = theme;
+        }
+        self.repaint();
+        if let Err(error) = settings::path().and_then(|path| theme.save(&path)) {
+            show_error(&format!(
+                "The theme changed for this session, but could not be saved.\n\n{error}\n\nCheck %LOCALAPPDATA%\\Myosotis\\settings.toml and its folder permissions."
+            ));
+        }
+    }
     unsafe fn tray_menu(&mut self) {
         if let Ok(menu) = CreatePopupMenu() {
             let _ = AppendMenuW(
@@ -499,6 +521,25 @@ impl App {
                 CAPTURE,
                 w!("Capture / blank canvas    Ctrl+Alt+S"),
             );
+            let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
+            if let Ok(themes) = CreatePopupMenu() {
+                let _ = AppendMenuW(themes, MF_STRING, THEME_DARK, w!("Dark"));
+                let _ = AppendMenuW(themes, MF_STRING, THEME_LIGHT, w!("Light"));
+                let selected = match self.theme {
+                    Theme::Dark => THEME_DARK,
+                    Theme::Light => THEME_LIGHT,
+                };
+                let _ = CheckMenuRadioItem(
+                    themes,
+                    THEME_DARK as u32,
+                    THEME_LIGHT as u32,
+                    selected as u32,
+                    MF_BYCOMMAND.0,
+                );
+                if AppendMenuW(menu, MF_POPUP, themes.0 as usize, w!("Theme")).is_err() {
+                    let _ = DestroyMenu(themes);
+                }
+            }
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
             let _ = AppendMenuW(menu, MF_STRING, QUIT, w!("Quit Myosotis"));
             let mut p = POINT::default();
@@ -522,6 +563,8 @@ impl App {
                         show_error(&e.to_string());
                     }
                 }
+                THEME_DARK => self.change_theme(Theme::Dark),
+                THEME_LIGHT => self.change_theme(Theme::Light),
                 QUIT => {
                     let _ = DestroyWindow(self.hwnd);
                 }
@@ -671,7 +714,7 @@ pub fn run() -> Result<()> {
             hIcon: wc.hIcon,
             ..Default::default()
         };
-        let tip: Vec<u16> = "Myosotis · Ctrl+Alt+S · Right-click to quit"
+        let tip: Vec<u16> = "Myosotis · Ctrl+Alt+S · Right-click for options"
             .encode_utf16()
             .collect();
         tray.szTip[..tip.len()].copy_from_slice(&tip);
@@ -680,12 +723,19 @@ pub fn run() -> Result<()> {
             let _ = DestroyWindow(hwnd);
             return Err(Error::new(E_FAIL, "Could not add the Myosotis tray icon"));
         }
+        let theme = settings::path()
+            .and_then(|path| Theme::load(&path))
+            .unwrap_or_else(|error| {
+                eprintln!("Could not load theme settings; using Dark: {error}");
+                Theme::Dark
+            });
         APP.with(|a| {
             *a.borrow_mut() = Some(App {
                 hwnd,
                 previous: HWND::default(),
                 doc: Document::default(),
                 renderer: None,
+                theme,
                 pixels: vec![],
                 origin: POINT::default(),
                 full: Rect::default(),

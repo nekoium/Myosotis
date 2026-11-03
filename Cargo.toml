@@ -6,6 +6,7 @@ license = "MIT"
 description = "Capture, scribble, and paste. A small native Windows annotation app."
 
 [dependencies]
+toml = { version = "1.1.8", default-features = false, features = ["std", "parse", "display", "serde"] }
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
   "Foundation_Numerics",

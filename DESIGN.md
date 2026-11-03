@@ -115,9 +115,17 @@ Use a shared Rust core with native implementations for each platform. Share the 
 
 ## Selected interface direction
 
-The finalized Windows interface uses a compact dark rectangular toolbar with rounded corners, no perimeter outline, and no shadow. Six 40-DIP cells contain vector icons for pen, arrow, rectangle, numbered mark, Copy, and Cancel. Neutral fills identify the selected tool and hovered controls; blue emphasizes Copy. The existing guidance surface uses the same dark treatment, a shorter persistent hint, and contextual tool descriptions on hover. Keyboard shortcuts, completion gestures, and toolbar placement remain unchanged.
+The finalized Windows interface defaults to a compact dark rectangular toolbar with rounded corners, no perimeter outline, and no shadow. Six 40-DIP cells contain vector icons for pen, arrow, rectangle, numbered mark, Copy, and Cancel. Neutral fills identify the selected tool and hovered controls; blue emphasizes Copy. The existing guidance surface uses the same dark treatment, a shorter persistent hint, and contextual tool descriptions on hover. Keyboard shortcuts, completion gestures, and toolbar placement remain unchanged.
 
-Annotation defaults use coral ink, rounded pen and arrow caps, finer arrows and rectangle outlines, and compact numbered markers. Overlay rendering and clipboard export share these defaults. No configuration, dependencies, animations, or background sampling are added.
+Annotation defaults use coral ink, rounded pen and arrow caps, finer arrows and rectangle outlines, and compact numbered markers. Overlay rendering and clipboard export share these defaults. No animations or background sampling are added.
+
+### Appearance preference
+
+For [issue #6](https://github.com/nekoium/Myosotis/issues/6), the native tray menu provides a **Theme** submenu with mutually exclusive **Dark** and **Light** radio choices. Dark is the first-launch default. Changing the choice immediately repaints toolbar and guidance surfaces, text, icons, and control states without resetting a capture or its history. Copy retains its blue fill and white icon. Captured pixels, white blank canvases, annotation styles, and clipboard export are independent of the interface theme. The native popup menu follows Windows styling.
+
+The preference lives in `%LOCALAPPDATA%\Myosotis\settings.toml`, using the TOML library already present in the build dependency graph. Read once at startup; create the folder and settings file only when the user changes the theme. Missing, invalid, or unreadable settings fall back to Dark. Save through a temporary file and replace the previous file after writing succeeds. A failed save leaves the new theme active for the session and displays an understandable error. Existing unrelated TOML values survive a theme update; comments and formatting may be rewritten. Malformed TOML is preserved rather than overwritten.
+
+There is no registry setting or automatic system-theme mode. Settings remain when a portable executable is deleted; users can reset preferences by closing Myosotis and deleting the settings folder. Storage outside the executable folder is an intentional choice so read-only app folders and executable moves work.
 
 This direction was selected after comparing Material, light macOS-inspired, and dark rectangular candidates with and without an outline. See [the design comparison](docs/DESIGN-DIRECTIONS.md) for references, verification, and remaining accessibility and display checks. This is a native Windows design; it does not add macOS support.
 

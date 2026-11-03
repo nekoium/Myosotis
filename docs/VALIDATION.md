@@ -27,6 +27,16 @@ PE import inspection found only Windows-provided libraries: kernel32, user32, gd
 - Repeated invocation and cancellation complete, followed by normal resident-process exit and tray cleanup.
 - An interactive blank-canvas sketch containing rectangles, an arrow, and numbered marks was copied from the packaged executable and visibly pasted into Microsoft Paint. The test Paint window was then closed without saving.
 
+## Theme preference validation
+
+The implementation for [issue #6](https://github.com/nekoium/Myosotis/issues/6) passed formatting, Clippy with warnings denied, and all 11 unit tests. The settings test covers a missing file without creating a folder, Dark/Light round trips, unknown and incorrectly typed values, preservation of unrelated TOML values, malformed TOML, and a failed temporary-file write that leaves previous settings intact.
+
+`tools/Test-Themes.ps1` passed against the release executable with an isolated `LOCALAPPDATA` under the project. It checked native menu selection marks, no settings creation on default launch, persistence after restarting, live Light/Dark/Light toolbar pixels during a capture, preserved selection and annotation history, and exported white canvas/coral pixels. The existing native smoke suite also passed. The previously running resident app was closed only while idle and restored afterward.
+
+The release executable measured 533,504 bytes, versus 331,264 bytes before theme support. An isolated package containing the same executable, README, licenses, and images as `tools/Package.ps1` measured 622,656 bytes extracted and 339,092 bytes zipped. Both size limits passed. Existing `dist/` files and public release assets were not replaced.
+
+These checks do not establish visual quality across all monitors, accessibility themes, long-session performance, or physical input latency. Save-error reporting is covered by code inspection and settings failure tests; a native permission-error dialog was not exercised.
+
 ## Measurements and limits
 
 The final smoke run logged 15 captures at **78–112 ms** from the beginning of acquisition to overlay setup and invalidation. Seven successful clipboard exports took **9–75 ms** from composition through PNG encoding and clipboard transfer. These are internal wall-clock timings; capture timing does not include the delay until the first presented frame or hotkey delivery, and no percentile claim is made from this small run.

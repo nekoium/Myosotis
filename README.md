@@ -30,13 +30,21 @@ cargo build --locked --release
 .\target\release\myosotis.exe --capture
 ```
 
-Myosotis stays in the notification area after you copy or cancel. Use **Ctrl+Alt+S** to capture again. Click its flower icon to capture, or right-click it to quit. If Windows hides the icon, look under the notification area's overflow arrow.
+Myosotis stays in the notification area after you copy or cancel. Use **Ctrl+Alt+S** to capture again. Click its flower icon to capture, or right-click it for theme options and Quit. If Windows hides the icon, look under the notification area's overflow arrow.
 
 Launching the executable again opens the resident app. The shortcut is fixed for this MVP; if another app owns Ctrl+Alt+S, Myosotis reports the conflict.
 
+### Appearance and settings
+
+Right-click the notification-area icon, open **Theme**, and choose **Dark** or **Light**. A radio mark shows the current choice. Dark is the default; changes apply immediately, including during a capture. The theme changes the toolbar and guidance panels. Screenshots, white canvases, and copied annotations keep their original colors.
+
+Myosotis saves your choice in `%LOCALAPPDATA%\Myosotis\settings.toml` when you change the theme. If saving fails, the theme still applies for the current session and Myosotis reports the problem. Missing or invalid settings use Dark at startup.
+
+To reset preferences, quit Myosotis and delete `%LOCALAPPDATA%\Myosotis`. This folder remains if you remove the portable executable; you can delete it yourself. No registry settings are created.
+
 ## See it in use
 
-The dark toolbar stays consistent across light and dark screenshots. These examples show the pen, arrow, rectangle, and numbered-mark tools.
+The default dark toolbar stays consistent across light and dark screenshots. These examples show the pen, arrow, rectangle, and numbered-mark tools.
 
 | Light screenshot | Dark screenshot |
 | --- | --- |

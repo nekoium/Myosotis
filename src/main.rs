@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod document;
+#[cfg(any(windows, test))]
+mod settings;
 #[cfg(windows)]
 mod windows;
 

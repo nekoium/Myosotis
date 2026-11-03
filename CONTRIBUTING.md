@@ -30,6 +30,14 @@ powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/Smoke-Test.ps1 -E
 
 The smoke script takes over mouse position and focus, invokes the real global shortcut, and replaces the clipboard with test data. It requires a primary display at `(0,0)` of at least 1400 × 1000 physical pixels, an unlocked interactive desktop, and a free Ctrl+Alt+S shortcut. It creates and removes its own resident app and color fixture. It verifies pixels from bitmap and PNG clipboard formats, drawing tools, selection resizing, Space input, undo/redo, clipboard contention, cancellation, frozen capture, foreground restoration, and clean exit. Timing logs go to `.tmp/smoke-timings.log`. Foreground restoration is asynchronous across processes; the fixture pumps its own event loop while checking activation.
 
+`tools/Test-Themes.ps1` checks the native tray theme marks, default behavior without creating settings, restart persistence, both live palettes, capture/history preservation, and unchanged white-canvas/coral clipboard pixels:
+
+```powershell
+powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/Test-Themes.ps1 -Exe target/release/myosotis.exe
+```
+
+Like the smoke check, it requires an interactive desktop, takes focus and pointer control, and replaces clipboard contents. Quit the resident app first. Settings are isolated under a temporary project folder by overriding `LOCALAPPDATA` only for the test child process; the test removes that folder afterward.
+
 `tools/Verify-Clipboard.ps1` decodes a CF_DIB currently on the clipboard into `.tmp/clipboard.png` for diagnosis. Do not publish captures containing private information. The `ExecutionPolicy Bypass` flag applies to this PowerShell process only; these commands do not change the machine's execution policy.
 
 ## Package

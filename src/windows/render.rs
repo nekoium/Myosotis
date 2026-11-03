@@ -1,4 +1,7 @@
-use crate::document::{Annotation, Document, Point, Rect, Tool};
+use crate::{
+    document::{Annotation, Document, Point, Rect, Tool},
+    settings::Theme,
+};
 use ::windows::{
     core::*,
     Foundation::Numerics::Matrix3x2,
@@ -50,6 +53,7 @@ fn properties() -> D2D1_RENDER_TARGET_PROPERTIES {
 }
 
 pub struct Renderer {
+    pub theme: Theme,
     factory: ID2D1Factory,
     pub target: ID2D1HwndRenderTarget,
     bitmap: ID2D1Bitmap,
@@ -65,6 +69,7 @@ impl Renderer {
         height: u32,
         pixels: &[u8],
         scale: f32,
+        theme: Theme,
     ) -> Result<Self> {
         let factory: ID2D1Factory = D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)?;
         let target = factory.CreateHwndRenderTarget(
@@ -117,6 +122,7 @@ impl Renderer {
             None,
         )?;
         Ok(Self {
+            theme,
             factory,
             target,
             bitmap,
@@ -359,7 +365,22 @@ impl Renderer {
             let shade = target.CreateSolidColorBrush(&color(0.02, 0.02, 0.02, 0.38), None)?;
             let accent = target.CreateSolidColorBrush(&color(0.16, 0.43, 0.83, 1.), None)?;
             let white = target.CreateSolidColorBrush(&color(0.94, 0.94, 0.95, 1.), None)?;
-            let panel = target.CreateSolidColorBrush(&color(0.14, 0.14, 0.15, 1.), None)?;
+            let (panel_color, foreground_color, hover_color, selected_color) = match self.theme {
+                Theme::Dark => (
+                    color(0.14, 0.14, 0.15, 1.),
+                    color(0.94, 0.94, 0.95, 1.),
+                    color(0.22, 0.22, 0.24, 1.),
+                    color(0.32, 0.32, 0.35, 1.),
+                ),
+                Theme::Light => (
+                    color(0.94, 0.94, 0.95, 1.),
+                    color(0.12, 0.12, 0.14, 1.),
+                    color(0.86, 0.86, 0.88, 1.),
+                    color(0.76, 0.76, 0.79, 1.),
+                ),
+            };
+            let panel = target.CreateSolidColorBrush(&panel_color, None)?;
+            let foreground = target.CreateSolidColorBrush(&foreground_color, None)?;
             if let Some(r) = doc.selection.or(selecting) {
                 for outside in [
                     Rect {
@@ -413,9 +434,8 @@ impl Renderer {
                     },
                     &panel,
                 );
-                let hover = target.CreateSolidColorBrush(&color(0.22, 0.22, 0.24, 1.), None)?;
-                let selected_fill =
-                    target.CreateSolidColorBrush(&color(0.32, 0.32, 0.35, 1.), None)?;
+                let hover = target.CreateSolidColorBrush(&hover_color, None)?;
+                let selected_fill = target.CreateSolidColorBrush(&selected_color, None)?;
                 let primary = target.CreateSolidColorBrush(&color(0.12, 0.36, 0.75, 1.), None)?;
                 for index in 0..6 {
                     let cell = Rect {
@@ -454,7 +474,12 @@ impl Renderer {
                             None,
                         );
                     }
-                    self.icon(&target, index, cell, &white);
+                    self.icon(
+                        &target,
+                        index,
+                        cell,
+                        if index == 4 { &white } else { &foreground },
+                    );
                 }
             }
             if !hint.is_empty() {
@@ -495,7 +520,7 @@ impl Renderer {
                         left: area.left + 12. * self.scale,
                         ..area
                     },
-                    &white,
+                    &foreground,
                     false,
                 );
             }
