@@ -67,8 +67,8 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test --locked
 powershell -NoProfile -ExecutionPolicy Bypass -File tools/Package.ps1
-powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/stroke-eval/Check-Functions.ps1 -Exe dist/Myosotis/myosotis.exe
-powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/Test-Themes.ps1 -Exe dist/Myosotis/myosotis.exe
+powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/stroke-eval/Check-Functions.ps1 -Exe dist/Myosotis/myosotis.exe -Interactive
+powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/Test-Themes.ps1 -Exe dist/Myosotis/myosotis.exe -Interactive
 ```
 
 `tools/release/Capture-Showcase.ps1` writes native fixture captures with isolated theme settings. `tools/release/Summarize-Performance.cjs` validates and aggregates the named local release runs. `tools/release/Build-Showcase.ps1` composes all three PNGs from those captures and measurements. They require the preserved local source artifacts; their filenames are explicit in the scripts. The chart uses the standard .NET chart library; raster composition uses System.Drawing.

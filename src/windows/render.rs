@@ -833,3 +833,6 @@ impl Renderer {
 #[cfg(test)]
 #[path = "number_badge_tests.rs"]
 mod number_badge_tests;
+#[cfg(test)]
+#[path = "render_tests.rs"]
+mod render_tests;

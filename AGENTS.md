@@ -1,0 +1,5 @@
+# Agent instructions
+
+Before planning feature or UX work, read [CONTRIBUTING.md](CONTRIBUTING.md#ideas-and-product-decisions) and [DESIGN.md](DESIGN.md), review open GitHub issues, and search for related discussions. Follow the issue workflow in CONTRIBUTING.md: keep decisions and tracking checklists current, link implementation work, and update DESIGN.md when agreed interactions change.
+
+Routine validation must leave the user's desktop usable. Follow CONTRIBUTING.md's check-selection policy: prefer unit/offscreen checks, including `offscreen_stroke_stress` for rendering work. Never launch cursor/focus-driving smoke, theme, stroke replay, preview, or showcase scripts on the user's desktop unless they have explicitly made it available for that run. An instruction to test or validate alone does not make the desktop available. These scripts can require exclusive pointer ownership throughout execution, not just startup; do not automatically retry if the user moves the mouse. Keep real input, focus, clipboard, and presentation qualification separate from offscreen results.

@@ -34,19 +34,21 @@ Finish or cancel your capture and quit the running Myosotis through its tray men
 
 ## Diagnostic replay
 
+For routine rendering work, first use the cursor-free checks in [CONTRIBUTING.md](../CONTRIBUTING.md#check-changes), including the optional `offscreen_stroke_stress` test. The native replay below requires exclusive desktop use throughout execution; it is not suitable while the user works at the computer. Run it only in an explicitly available desktop or separate interactive Windows environment.
+
 The diagnostic harness drives the existing executables on a white fixture. It moves the pointer, takes focus, captures only the selected white test canvas, and leaves the clipboard untouched. It refuses to run if Myosotis is already resident, and closes only the process it starts. It restores the previous foreground window and pointer position on ordinary completion or failure. Avoid interrupting it; forcibly terminating the harness may bypass cleanup.
 
 ```powershell
-powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/stroke-eval/Run.ps1 -Direction Baseline -Repeat 10
-powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/stroke-eval/Run.ps1 -Direction Clean -Repeat 10
-powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/stroke-eval/Run.ps1 -Direction Natural -Repeat 10
+powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/stroke-eval/Run.ps1 -Direction Baseline -Repeat 10 -Interactive
+powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/stroke-eval/Run.ps1 -Direction Clean -Repeat 10 -Interactive
+powershell -NoProfile -STA -ExecutionPolicy Bypass -File tools/stroke-eval/Run.ps1 -Direction Natural -Repeat 10 -Interactive
 node tools/stroke-eval/Summarize.cjs
 ```
 
 Use a fresh repeat number to retain earlier results. Default diagnostic densities are 0, 5, and 25 long historical strokes, with 12 measured forced-paint cycles each. To test a single growing stroke:
 
 ```powershell
-powershell -NoProfile -STA -ExecutionPolicy Bypass -Command "& ./tools/stroke-eval/Run.ps1 -Direction Baseline -Densities @(-1) -Repeat 11"
+powershell -NoProfile -STA -ExecutionPolicy Bypass -Command "& ./tools/stroke-eval/Run.ps1 -Direction Baseline -Densities @(-1) -Repeat 11 -Interactive"
 ```
 
 Replace `Baseline` to compare the other builds. The single-stroke probe checks approximately 80, 320, and 640 prepared input samples, then adds a few samples while timing paint work. Preparation is untimed and display is suppressed equally for all builds; display is enabled for every measurement and real input replay.

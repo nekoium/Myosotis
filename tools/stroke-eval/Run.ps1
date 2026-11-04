@@ -5,10 +5,12 @@ param(
     [int]$Repeat = 1,
     [string]$Executable,
     [string]$ResultName,
-    [ValidateRange(1,60)][int]$Seconds = 2
+    [ValidateRange(1,60)][int]$Seconds = 2,
+    [switch]$Interactive
 )
 # Diagnostic spike: drives only a process it starts. Modes -2/-4 test copying; use Check-Functions.ps1 to preserve clipboard formats.
 $ErrorActionPreference = 'Stop'
+if (!$Interactive) { throw 'Native replay requires exclusive cursor and focus control for the entire run. For cursor-free stress checks use cargo test --locked --release offscreen_stroke_stress -- --ignored --nocapture. Pass -Interactive only when the desktop is available.' }
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 $root = [IO.Path]::GetFullPath("$PSScriptRoot/../..")

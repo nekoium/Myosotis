@@ -1,6 +1,7 @@
-param([string]$Exe = "$PSScriptRoot/../target/release/myosotis.exe")
+param([string]$Exe = "$PSScriptRoot/../target/release/myosotis.exe", [switch]$Interactive)
 # Interactive check: takes focus/pointer and replaces the clipboard with a synthetic white canvas.
 $ErrorActionPreference = 'Stop'
+if (!$Interactive) { throw 'This suite owns the desktop cursor, focus, and clipboard for its entire run. Use cargo test --locked for cursor-free checks. Pass -Interactive only when the desktop is available.' }
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 Add-Type @'
 using System;

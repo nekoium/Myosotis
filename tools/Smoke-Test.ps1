@@ -1,10 +1,12 @@
 param(
     [string]$Exe = "$PSScriptRoot/../dist/Myosotis/myosotis.exe",
     [float]$ToolbarCell = 40,
-    [float]$ToolbarHeight = 44
+    [float]$ToolbarHeight = 44,
+    [switch]$Interactive
 )
 # Interactive Windows check: takes pointer/focus and replaces the clipboard with test content.
 $ErrorActionPreference = 'Stop'
+if (!$Interactive) { throw 'This suite owns the desktop cursor, focus, and clipboard for its entire run. Use cargo test --locked for cursor-free checks. Pass -Interactive only when the desktop is available.' }
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type @'
 using System;
