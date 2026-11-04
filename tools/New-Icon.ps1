@@ -1,32 +1,49 @@
-# Regenerate the multi-resolution Windows icon with system drawing facilities.
+# Regenerate the selected flat flower (direction A) using system drawing facilities.
+# Palette and geometry: docs/ICON-DESIGN.md.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
-$images = @()
-foreach ($size in @(16,32,48,256)) {
-    $bitmap = New-Object Drawing.Bitmap 256,256
-    $g = [Drawing.Graphics]::FromImage($bitmap)
-    $g.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
-    $petal = New-Object Drawing.SolidBrush ([Drawing.Color]::FromArgb(139,170,255))
-    $center = New-Object Drawing.SolidBrush ([Drawing.Color]::FromArgb(255,213,94))
-    $outline = New-Object Drawing.Pen ([Drawing.Color]::FromArgb(30,44,86)),8
+$colors = @('#648DF0', '#7EA3F8', '#6B95F2', '#86AAF7', '#739CF4')
+$bitmap = New-Object Drawing.Bitmap 1024,1024
+$g = [Drawing.Graphics]::FromImage($bitmap)
+$g.SmoothingMode = [Drawing.Drawing2D.SmoothingMode]::AntiAlias
+try {
     for ($i=0; $i -lt 5; $i++) {
-        $angle = (-90+$i*72)*[Math]::PI/180
-        $x = [single](128+62*[Math]::Cos($angle)-48)
-        $y = [single](128+62*[Math]::Sin($angle)-48)
-        $g.FillEllipse($petal,$x,$y,96,96)
-        $g.DrawEllipse($outline,$x,$y,96,96)
+        $g.ResetTransform()
+        $g.ScaleTransform(4,4)
+        $g.TranslateTransform(128,128)
+        $g.RotateTransform($i*72)
+        $petal = New-Object Drawing.SolidBrush ([Drawing.ColorTranslator]::FromHtml($colors[$i]))
+        $path = New-Object Drawing.Drawing2D.GraphicsPath
+        try {
+            $path.AddBezier(-13,-4,-48,-28,-51,-62,-34,-87)
+            $path.AddBezier(-34,-87,-13,-115,35,-103,41,-76)
+            $path.AddBezier(41,-76,49,-48,28,-12,-13,-4)
+            $path.CloseFigure()
+            $g.FillPath($petal,$path)
+        } finally { $path.Dispose();$petal.Dispose() }
     }
-    $g.FillEllipse($center,100,100,56,56)
-    $g.DrawEllipse($outline,100,100,56,56)
-    $scaled = New-Object Drawing.Bitmap $size,$size
-    $sg = [Drawing.Graphics]::FromImage($scaled)
-    $sg.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-    $sg.DrawImage($bitmap,0,0,$size,$size)
-    $stream = New-Object IO.MemoryStream
-    $scaled.Save($stream,[Drawing.Imaging.ImageFormat]::Png)
-    $images += @{Size=$size;Data=$stream.ToArray()}
-    $stream.Dispose();$sg.Dispose();$scaled.Dispose();$g.Dispose();$bitmap.Dispose();$petal.Dispose();$center.Dispose();$outline.Dispose()
-}
+    $g.ResetTransform()
+    $g.ScaleTransform(4,4)
+    $center = New-Object Drawing.SolidBrush ([Drawing.ColorTranslator]::FromHtml('#F5C85C'))
+    try { $g.FillEllipse($center,105,105,46,46) } finally { $center.Dispose() }
+} finally { $g.Dispose() }
+$images = @()
+try {
+    foreach ($size in @(16,32,48,256)) {
+        $scaled = New-Object Drawing.Bitmap $size,$size
+        $sg = [Drawing.Graphics]::FromImage($scaled)
+        $stream = New-Object IO.MemoryStream
+        try {
+            $sg.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+            $sg.DrawImage($bitmap,0,0,$size,$size)
+            $scaled.Save($stream,[Drawing.Imaging.ImageFormat]::Png)
+            $images += @{Size=$size;Data=$stream.ToArray()}
+            if ($size -eq 256) {
+                $scaled.Save("$PSScriptRoot/../assets/myosotis.png",[Drawing.Imaging.ImageFormat]::Png)
+            }
+        } finally { $stream.Dispose();$sg.Dispose();$scaled.Dispose() }
+    }
+} finally { $bitmap.Dispose() }
 $file = [IO.File]::Create("$PSScriptRoot/../assets/myosotis.ico")
 $writer = New-Object IO.BinaryWriter $file
 try {

@@ -1,4 +1,4 @@
-# Myosotis
+# <img src="assets/myosotis.png" width="40" height="40" alt=""> Myosotis
 
 ### Talk is cheap, show them the pic.
 
