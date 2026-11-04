@@ -18,7 +18,7 @@ The default dark toolbar stays consistent across light and dark screenshots. The
 
 ## Get started
 
-The native MVP supports **Windows 11 x64**. Download [version 0.1.2](https://github.com/nekoium/Myosotis/releases/tag/v0.1.2), extract the ZIP, and run `Myosotis/myosotis.exe`. It is a portable app using Windows graphics and image facilities; no additional application runtime is required. The executable is currently unsigned. macOS and Linux are planned.
+The native MVP supports **Windows 11 x64**. Download [version 0.2.0](https://github.com/nekoium/Myosotis/releases/tag/v0.2.0), extract the ZIP, and run `Myosotis/myosotis.exe`. It is a portable app using Windows graphics and image facilities; no additional application runtime is required. The executable is currently unsigned. macOS and Linux are planned.
 
 ### Install with Scoop
 
@@ -86,7 +86,7 @@ The toolbar buttons run from left to right:
 | Copy (overlapping pages) | Copy the finished image and close the capture | `Ctrl` on its own or `Enter` |
 | Cancel (cross) | Close the capture without copying | `Esc` |
 
-You can click a tool or press its number key. The selected tool has a gray background. Copy has a blue background.
+You can click a tool or press its number key. The selected tool has a gray background. Copy has a periwinkle background.
 
 The other controls depend on whether you have selected an area:
 
@@ -111,7 +111,9 @@ Double-click quickly and keep the pointer nearly still. Myosotis uses its own sh
 
 Capture and annotation happen locally. Myosotis does not upload images, save captures to disk, or connect to your agent. It puts the finished image on the Windows clipboard as a bitmap and PNG. Windows clipboard history, synchronization, and other clipboard-reading applications can access it according to your system settings.
 
-This MVP uses a fixed coral drawing color and preset line weights for each tool. Pressure sensitivity, erasers, editable shapes, custom shortcuts, and screen-reader access to individual drawn toolbar controls are not implemented. Keyboard shortcuts are available for every tool, copy, and cancellation.
+Pen strokes taper at the start and end. Mouse drawing uses mild speed-based width variation; valid stylus pressure controls the width instead. Captured positions are preserved without artificial path smoothing. Annotations use refined coral ink, and numbered badges widen to fit multiple digits.
+
+This MVP uses a fixed drawing color and preset line weights for each tool. Erasers, editable shapes, custom shortcuts, and screen-reader access to individual drawn toolbar controls are not implemented. Keyboard shortcuts are available for every tool, copy, and cancellation. Pressure input has been checked with synthetic Windows pen input; real stylus hardware remains unqualified. Small antialias seams and preview/export pixel differences remain known rendering limitations.
 
 HDR output, protected content, secure desktops, and mixed-DPI multi-monitor arrangements have not been fully validated. Changing the display arrangement during a capture cancels that capture. Keep a separate copy of anything important before closing an overlay; annotations are not saved between captures.
 

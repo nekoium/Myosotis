@@ -1,5 +1,9 @@
 # Windows MVP validation
 
+## Version 0.2.0
+
+See [the 0.2.0 validation record](releases/0.2.0/VALIDATION.md) for current package checks, native smoke/theme results, pressure diagnostics, fresh five-run performance comparisons, and the packaged executable's 60-second replay. Natural strokes are now the approved default. The sections below retain historical evidence from earlier releases.
+
 Validated on Windows 11 Enterprise x64, OS 10.0.26300, using Rust 1.99.0 with the MSVC target. The interactive display was 2560 × 1600 at 200% scaling. This establishes one working Windows configuration, not broad Windows/hardware support.
 
 ## Artifact
