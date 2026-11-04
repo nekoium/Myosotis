@@ -15,6 +15,97 @@ use ::windows::{
     },
 };
 
+use std::{cell::RefCell, collections::HashMap};
+
+const ANNOTATION_INK: D2D1_COLOR_F = D2D1_COLOR_F {
+    r: 199. / 255.,
+    g: 70. / 255.,
+    b: 86. / 255.,
+    a: 1.,
+};
+const INTERFACE_ACCENT: D2D1_COLOR_F = D2D1_COLOR_F {
+    r: 88. / 255.,
+    g: 101. / 255.,
+    b: 216. / 255.,
+    a: 1.,
+};
+
+struct NumberBadge {
+    layout: IDWriteTextLayout,
+    offset: Point,
+    half_width: f32,
+    radius: f32,
+}
+impl NumberBadge {
+    unsafe fn format(write: &IDWriteFactory, scale: f32) -> Result<IDWriteTextFormat> {
+        let format = write.CreateTextFormat(
+            w!("Segoe UI"),
+            None,
+            DWRITE_FONT_WEIGHT_SEMI_BOLD,
+            DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL,
+            14. * scale,
+            w!("en-us"),
+        )?;
+        format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
+        Ok(format)
+    }
+
+    unsafe fn new(
+        write: &IDWriteFactory,
+        format: &IDWriteTextFormat,
+        number: usize,
+        scale: f32,
+    ) -> Result<Self> {
+        let text: Vec<u16> = number.to_string().encode_utf16().collect();
+        let width = 256. * scale;
+        let height = 64. * scale;
+        let layout = write.CreateTextLayout(&text, format, width, height)?;
+        // Overhangs are relative to the layout box, including its unused space.
+        let bounds = layout.GetOverhangMetrics()?;
+        let left = -bounds.left;
+        let top = -bounds.top;
+        let right = width + bounds.right;
+        let bottom = height + bounds.bottom;
+        let radius = 12. * scale;
+        Ok(Self {
+            layout,
+            offset: Point::new(-(left + right) / 2., -(top + bottom) / 2.),
+            half_width: radius.max((right - left) / 2. + 8. * scale),
+            radius,
+        })
+    }
+
+    unsafe fn draw(
+        &self,
+        target: &ID2D1RenderTarget,
+        center: Point,
+        ink: &ID2D1SolidColorBrush,
+        white: &ID2D1SolidColorBrush,
+    ) {
+        target.FillRoundedRectangle(
+            &D2D1_ROUNDED_RECT {
+                rect: rect(Rect::between(
+                    Point::new(center.x - self.half_width, center.y - self.radius),
+                    Point::new(center.x + self.half_width, center.y + self.radius),
+                )),
+                radiusX: self.radius,
+                radiusY: self.radius,
+            },
+            ink,
+        );
+        target.DrawTextLayout(
+            point(Point::new(
+                center.x + self.offset.x,
+                center.y + self.offset.y,
+            )),
+            &self.layout,
+            white,
+            D2D1_DRAW_TEXT_OPTIONS_NO_SNAP,
+        );
+    }
+}
+
 pub const TOOLBAR_CELL: f32 = 40.;
 pub const TOOLBAR_HEIGHT: f32 = 44.;
 pub const TOOLBAR_LABELS: [&str; 6] = [
@@ -59,6 +150,8 @@ pub struct Renderer {
     bitmap: ID2D1Bitmap,
     small: IDWriteTextFormat,
     number: IDWriteTextFormat,
+    write: IDWriteFactory,
+    numbers: RefCell<HashMap<usize, NumberBadge>>,
     scale: f32,
     rounded_stroke: ID2D1StrokeStyle,
 }
@@ -101,17 +194,7 @@ impl Renderer {
             w!("en-us"),
         )?;
         small.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
-        let number = write.CreateTextFormat(
-            w!("Segoe UI"),
-            None,
-            DWRITE_FONT_WEIGHT_BOLD,
-            DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL,
-            15. * scale,
-            w!("en-us"),
-        )?;
-        number.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
-        number.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+        let number = NumberBadge::format(&write, scale)?;
         let rounded_stroke = factory.CreateStrokeStyle(
             &D2D1_STROKE_STYLE_PROPERTIES {
                 startCap: D2D1_CAP_STYLE_ROUND,
@@ -128,6 +211,8 @@ impl Renderer {
             bitmap,
             small,
             number,
+            write,
+            numbers: RefCell::new(HashMap::new()),
             scale,
             rounded_stroke,
         })
@@ -138,12 +223,11 @@ impl Renderer {
         text: &str,
         bounds: Rect,
         brush: &ID2D1SolidColorBrush,
-        number: bool,
     ) {
         let text: Vec<u16> = text.encode_utf16().collect();
         target.DrawText(
             &text,
-            if number { &self.number } else { &self.small },
+            &self.small,
             &rect(bounds),
             brush,
             D2D1_DRAW_TEXT_OPTIONS_CLIP,
@@ -170,9 +254,9 @@ impl Renderer {
             if doc.blank {
                 target.FillRectangle(&rect(selection), &white);
             }
-            let ink = target.CreateSolidColorBrush(&color(0.94, 0.24, 0.26, 1.), None)?;
+            let ink = target.CreateSolidColorBrush(&ANNOTATION_INK, None)?;
             for a in doc.annotations.iter().chain(doc.active.iter()) {
-                self.annotation(target, a, &ink, &white);
+                self.annotation(target, a, &ink, &white)?;
             }
             target.PopAxisAlignedClip();
         }
@@ -184,7 +268,7 @@ impl Renderer {
         a: &Annotation,
         ink: &ID2D1SolidColorBrush,
         white: &ID2D1SolidColorBrush,
-    ) {
+    ) -> Result<()> {
         let start = a.points[0];
         let end = *a.points.last().unwrap();
         match a.tool {
@@ -243,27 +327,19 @@ impl Renderer {
                 None,
             ),
             Tool::Number => {
-                let radius = 11. * self.scale;
-                target.FillEllipse(
-                    &D2D1_ELLIPSE {
-                        point: point(start),
-                        radiusX: radius,
-                        radiusY: radius,
-                    },
-                    ink,
-                );
-                self.text(
-                    target,
-                    &a.number.to_string(),
-                    Rect::between(
-                        Point::new(start.x - radius, start.y - radius),
-                        Point::new(start.x + radius, start.y + radius),
-                    ),
-                    white,
-                    true,
-                );
+                let mut numbers = self.numbers.borrow_mut();
+                if let std::collections::hash_map::Entry::Vacant(entry) = numbers.entry(a.number) {
+                    entry.insert(NumberBadge::new(
+                        &self.write,
+                        &self.number,
+                        a.number,
+                        self.scale,
+                    )?);
+                }
+                numbers[&a.number].draw(target, start, ink, white);
             }
         }
+        Ok(())
     }
     unsafe fn icon(
         &self,
@@ -363,7 +439,7 @@ impl Renderer {
         let result = (|| {
             self.image(&target, &self.bitmap, doc, full)?;
             let shade = target.CreateSolidColorBrush(&color(0.02, 0.02, 0.02, 0.38), None)?;
-            let accent = target.CreateSolidColorBrush(&color(0.16, 0.43, 0.83, 1.), None)?;
+            let accent = target.CreateSolidColorBrush(&INTERFACE_ACCENT, None)?;
             let white = target.CreateSolidColorBrush(&color(0.94, 0.94, 0.95, 1.), None)?;
             let (panel_color, foreground_color, hover_color, selected_color) = match self.theme {
                 Theme::Dark => (
@@ -436,7 +512,6 @@ impl Renderer {
                 );
                 let hover = target.CreateSolidColorBrush(&hover_color, None)?;
                 let selected_fill = target.CreateSolidColorBrush(&selected_color, None)?;
-                let primary = target.CreateSolidColorBrush(&color(0.12, 0.36, 0.75, 1.), None)?;
                 for index in 0..6 {
                     let cell = Rect {
                         left: bar.left + index as f32 * TOOLBAR_CELL * self.scale,
@@ -457,7 +532,7 @@ impl Renderer {
                                 radiusY: 6. * self.scale,
                             },
                             if index == 4 {
-                                &primary
+                                &accent
                             } else if selected {
                                 &selected_fill
                             } else {
@@ -521,7 +596,6 @@ impl Renderer {
                         ..area
                     },
                     &foreground,
-                    false,
                 );
             }
             Ok(())
@@ -579,3 +653,7 @@ impl Renderer {
         Ok(surface)
     }
 }
+
+#[cfg(test)]
+#[path = "number_badge_tests.rs"]
+mod number_badge_tests;

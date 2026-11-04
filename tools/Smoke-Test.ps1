@@ -71,7 +71,7 @@ function Copy-Image {
 }
 function Is-Ink($Image,[int]$X,[int]$Y) {
     $p = $Image.GetPixel($X,$Y)
-    return $p.R -gt 200 -and $p.G -lt 120 -and $p.B -lt 150
+    return [Math]::Abs($p.R-199) -le 12 -and [Math]::Abs($p.G-70) -le 12 -and [Math]::Abs($p.B-86) -le 12
 }
 $existing = [NativeSmoke]::FindWindow('Myosotis.Native.Overlay',[IntPtr]::Zero)
 Assert ($existing -eq [IntPtr]::Zero) 'Quit the resident Myosotis before running this check.'

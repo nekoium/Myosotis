@@ -158,7 +158,7 @@ try {
         Assert ($image.Width -eq 800 -and $image.Height -eq 600) "Theme switch changed selection: $($image.Width) x $($image.Height)"
         Assert ($image.GetPixel(20,20).ToArgb() -eq [Drawing.Color]::White.ToArgb()) 'Theme changed exported white canvas'
         $ink = $image.GetPixel(300,200)
-        Assert ($ink.R -gt 200 -and $ink.G -lt 120 -and $ink.B -lt 150) 'Theme switch changed ink or lost annotation history'
+        Assert ([Math]::Abs($ink.R-199) -le 12 -and [Math]::Abs($ink.G-70) -le 12 -and [Math]::Abs($ink.B-86) -le 12) 'Theme switch changed ink or lost annotation history'
     } finally { if ($null -ne $image) { $image.Dispose() } }
     Stop-App
     Write-Output 'PASS default without settings, native menu marks, persistence, live palettes, capture/history preservation, white canvas and coral clipboard output'
