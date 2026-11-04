@@ -106,6 +106,14 @@ impl NumberBadge {
     }
 }
 
+struct InkCache {
+    target: ID2D1BitmapRenderTarget,
+    epoch: u64,
+    completed: usize,
+    active: Option<u64>,
+    segments: usize,
+}
+
 pub const TOOLBAR_CELL: f32 = 40.;
 pub const TOOLBAR_HEIGHT: f32 = 44.;
 pub const TOOLBAR_LABELS: [&str; 6] = [
@@ -154,6 +162,7 @@ pub struct Renderer {
     numbers: RefCell<HashMap<usize, NumberBadge>>,
     scale: f32,
     rounded_stroke: ID2D1StrokeStyle,
+    ink: RefCell<Option<InkCache>>,
 }
 impl Renderer {
     pub unsafe fn new(
@@ -215,6 +224,7 @@ impl Renderer {
             numbers: RefCell::new(HashMap::new()),
             scale,
             rounded_stroke,
+            ink: RefCell::new(None),
         })
     }
     unsafe fn text(
@@ -240,6 +250,7 @@ impl Renderer {
         bitmap: &ID2D1Bitmap,
         doc: &Document,
         full: Rect,
+        cached: bool,
     ) -> Result<()> {
         let white = target.CreateSolidColorBrush(&color(1., 1., 1., 1.), None)?;
         target.DrawBitmap(
@@ -255,12 +266,196 @@ impl Renderer {
                 target.FillRectangle(&rect(selection), &white);
             }
             let ink = target.CreateSolidColorBrush(&ANNOTATION_INK, None)?;
-            for a in doc.annotations.iter().chain(doc.active.iter()) {
-                self.annotation(target, a, &ink, &white)?;
-            }
+            let result: Result<()> = (|| {
+                if cached {
+                    let cache = self.ink.borrow();
+                    let cache = cache.as_ref().unwrap();
+                    let bitmap = cache.target.GetBitmap()?;
+                    target.DrawBitmap(
+                        &bitmap,
+                        Some(&rect(full)),
+                        1.,
+                        D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR,
+                        None,
+                    );
+                    if let Some(a) = &doc.active {
+                        if a.tool == Tool::Pen {
+                            self.pen(
+                                target,
+                                a,
+                                cache.segments,
+                                a.points.len().saturating_sub(1),
+                                true,
+                                &ink,
+                            )?;
+                        } else {
+                            self.annotation(target, a, &ink, &white)?;
+                        }
+                    }
+                } else {
+                    for a in doc.annotations.iter().chain(doc.active.iter()) {
+                        self.annotation(target, a, &ink, &white)?;
+                    }
+                }
+                Ok(())
+            })();
             target.PopAxisAlignedClip();
+            result?;
         }
         Ok(())
+    }
+    unsafe fn pen(
+        &self,
+        target: &ID2D1RenderTarget,
+        a: &Annotation,
+        first: usize,
+        end: usize,
+        taper_end: bool,
+        ink: &ID2D1SolidColorBrush,
+    ) -> Result<()> {
+        let stroke = a.stroke.as_ref().unwrap();
+        let disk = |n: crate::stroke::Node| {
+            target.FillEllipse(
+                &D2D1_ELLIPSE {
+                    point: point(n.point),
+                    radiusX: n.radius,
+                    radiusY: n.radius,
+                },
+                ink,
+            );
+        };
+        for i in first..end {
+            let nodes = stroke.segment(i, taper_end);
+            for pair in nodes.windows(2) {
+                let a = pair[0];
+                let b = pair[1];
+                if (a.radius - b.radius).abs() < 0.001 {
+                    target.DrawLine(point(a.point), point(b.point), ink, a.radius * 2., None);
+                } else {
+                    let dx = b.point.x - a.point.x;
+                    let dy = b.point.y - a.point.y;
+                    let length = dx.hypot(dy);
+                    // External tangents keep a changing radius from making segment corners protrude.
+                    let slope = ((a.radius - b.radius) / length).clamp(-1., 1.);
+                    let normal = (1. - slope * slope).sqrt();
+                    let offset = |p: Point, radius: f32, sign: f32| {
+                        point(Point::new(
+                            p.x + radius * (dx / length * slope - dy / length * normal * sign),
+                            p.y + radius * (dy / length * slope + dx / length * normal * sign),
+                        ))
+                    };
+                    let geometry = self.factory.CreatePathGeometry()?;
+                    let sink = geometry.Open()?;
+                    sink.BeginFigure(offset(a.point, a.radius, 1.), D2D1_FIGURE_BEGIN_FILLED);
+                    sink.AddLines(&[
+                        offset(a.point, a.radius, -1.),
+                        offset(b.point, b.radius, -1.),
+                        offset(b.point, b.radius, 1.),
+                    ]);
+                    sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+                    sink.Close()?;
+                    target.FillGeometry(&geometry, ink, None);
+                }
+                // Flat segment ends avoid dark beads from overlapping round caps on straight ink.
+                // Only the stroke ends and actual turns need round coverage.
+                let corner = if i > 0 {
+                    let p = stroke.nodes[i - 1].point;
+                    let q = stroke.nodes[i].point;
+                    let r = stroke.nodes[i + 1].point;
+                    let ux = q.x - p.x;
+                    let uy = q.y - p.y;
+                    let vx = r.x - q.x;
+                    let vy = r.y - q.y;
+                    (ux * vy - uy * vx).abs() > 0.001 || ux * vx + uy * vy < 0.
+                } else {
+                    true
+                };
+                if corner || a.distance != stroke.nodes[i].distance {
+                    disk(a);
+                }
+            }
+        }
+        if taper_end && (end == stroke.nodes.len() - 1) {
+            disk(stroke.disk(end, taper_end));
+        }
+        Ok(())
+    }
+    unsafe fn update_ink(&self, doc: &Document) -> Result<()> {
+        let mut slot = self.ink.borrow_mut();
+        if slot.is_none() {
+            let format = D2D1_PIXEL_FORMAT {
+                format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED,
+            };
+            let target = self.target.CreateCompatibleRenderTarget(
+                None,
+                None,
+                Some(&format),
+                D2D1_COMPATIBLE_RENDER_TARGET_OPTIONS_NONE,
+            )?;
+            *slot = Some(InkCache {
+                target,
+                epoch: u64::MAX,
+                completed: 0,
+                active: None,
+                segments: 0,
+            });
+        }
+        let cache = slot.as_mut().unwrap();
+        let abandoned = cache.active.is_some_and(|id| {
+            doc.active.as_ref().is_none_or(|a| a.id != id)
+                && doc
+                    .annotations
+                    .get(cache.completed)
+                    .is_none_or(|a| a.id != id)
+        });
+        let reset =
+            cache.epoch != doc.cache_epoch || cache.completed > doc.annotations.len() || abandoned;
+        let target: ID2D1RenderTarget = cache.target.cast()?;
+        target.BeginDraw();
+        let result = (|| {
+            if reset {
+                target.Clear(Some(&color(0., 0., 0., 0.)));
+                cache.completed = 0;
+                cache.active = None;
+                cache.segments = 0;
+                cache.epoch = doc.cache_epoch;
+            }
+            let ink = target.CreateSolidColorBrush(&ANNOTATION_INK, None)?;
+            let white = target.CreateSolidColorBrush(&color(1., 1., 1., 1.), None)?;
+            for a in &doc.annotations[cache.completed..] {
+                if cache.active == Some(a.id) {
+                    self.pen(
+                        &target,
+                        a,
+                        cache.segments,
+                        a.points.len().saturating_sub(1),
+                        true,
+                        &ink,
+                    )?;
+                } else {
+                    self.annotation(&target, a, &ink, &white)?;
+                }
+                cache.completed += 1;
+                cache.active = None;
+                cache.segments = 0;
+            }
+            if let Some(a) = doc.active.as_ref().filter(|a| a.tool == Tool::Pen) {
+                cache.active = Some(a.id);
+                let end = a.stroke.as_ref().unwrap().stable_segments();
+                if end > cache.segments {
+                    self.pen(&target, a, cache.segments, end, false, &ink)?;
+                    cache.segments = end;
+                }
+            }
+            Ok(())
+        })();
+        let end = target.EndDraw(None, None);
+        let result = result.and(end);
+        if result.is_err() {
+            *slot = None;
+        }
+        result
     }
     unsafe fn annotation(
         &self,
@@ -272,27 +467,7 @@ impl Renderer {
         let start = a.points[0];
         let end = *a.points.last().unwrap();
         match a.tool {
-            Tool::Pen => {
-                for pair in a.points.windows(2) {
-                    target.DrawLine(
-                        point(pair[0]),
-                        point(pair[1]),
-                        ink,
-                        a.width,
-                        Some(&self.rounded_stroke),
-                    );
-                }
-                for p in &a.points {
-                    target.FillEllipse(
-                        &D2D1_ELLIPSE {
-                            point: point(*p),
-                            radiusX: a.width / 2.,
-                            radiusY: a.width / 2.,
-                        },
-                        ink,
-                    );
-                }
-            }
+            Tool::Pen => self.pen(target, a, 0, a.points.len().saturating_sub(1), true, ink)?,
             Tool::Arrow => {
                 target.DrawLine(
                     point(start),
@@ -434,10 +609,11 @@ impl Renderer {
         pointer: Point,
         hint: &str,
     ) -> Result<()> {
+        self.update_ink(doc)?;
         let target: ID2D1RenderTarget = self.target.cast()?;
         target.BeginDraw();
         let result = (|| {
-            self.image(&target, &self.bitmap, doc, full)?;
+            self.image(&target, &self.bitmap, doc, full, true)?;
             let shade = target.CreateSolidColorBrush(&color(0.02, 0.02, 0.02, 0.38), None)?;
             let accent = target.CreateSolidColorBrush(&INTERFACE_ACCENT, None)?;
             let white = target.CreateSolidColorBrush(&color(0.94, 0.94, 0.95, 1.), None)?;
@@ -647,7 +823,7 @@ impl Renderer {
             M32: -selection.top,
         });
         target.BeginDraw();
-        let result = self.image(&target, &bitmap, doc, full);
+        let result = self.image(&target, &bitmap, doc, full, false);
         let end = target.EndDraw(None, None);
         result.and(end)?;
         Ok(surface)

@@ -5,6 +5,10 @@ edition = "2021"
 license = "MIT"
 description = "Capture, scribble, and paste. A small native Windows annotation app."
 
+[features]
+default = ["stroke-natural"]
+stroke-natural = []
+
 [dependencies]
 toml = { version = "1.1.8", default-features = false, features = ["std", "parse", "display", "serde"] }
 [target.'cfg(windows)'.dependencies]
@@ -14,7 +18,7 @@ windows = { version = "0.58", features = [
   "Win32_System_Ole", "Win32_System_Com", "Win32_System_Com_StructuredStorage", "Win32_System_DataExchange",
   "Win32_System_Registry", "Win32_Security",
   "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse",
-  "Win32_UI_HiDpi", "Win32_UI_Shell",
+  "Win32_UI_HiDpi", "Win32_UI_Shell", "Win32_UI_Input_Pointer",
   "Win32_Graphics_Gdi", "Win32_Graphics_Imaging", "Win32_Graphics_Direct2D", "Win32_Graphics_Direct2D_Common",
   "Win32_Graphics_DirectWrite", "Win32_Graphics_Dxgi_Common"
 ] }

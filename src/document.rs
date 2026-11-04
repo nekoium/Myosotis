@@ -1,4 +1,5 @@
 //! Platform-independent annotation document. Coordinates are image pixels.
+use crate::stroke::Stroke;
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Point {
     pub x: f32,
@@ -70,6 +71,8 @@ impl Tool {
 
 #[derive(Clone, Debug)]
 pub struct Annotation {
+    pub id: u64,
+    pub stroke: Option<Stroke>,
     pub tool: Tool,
     pub points: Vec<Point>,
     pub number: usize,
@@ -94,13 +97,19 @@ pub struct Document {
     pub active: Option<Annotation>,
     undo: Vec<Undo>,
     redo: Vec<Redo>,
+    pub cache_epoch: u64,
+    next_id: u64,
 }
 impl Document {
     pub fn select(&mut self, bounds: Rect, blank: bool) {
         self.selection = Some(bounds.rounded());
         self.blank = blank;
     }
+    #[cfg(test)]
     pub fn begin(&mut self, point: Point, scale: f32) {
+        self.begin_sample(point, scale, None, 0);
+    }
+    pub fn begin_sample(&mut self, point: Point, scale: f32, pressure: Option<f32>, time: u32) {
         if self.active.is_some() || !self.selection.is_some_and(|r| r.contains(point)) {
             return;
         }
@@ -110,17 +119,26 @@ impl Document {
             .filter(|a| a.tool == Tool::Number)
             .count()
             + 1;
+        self.next_id += 1;
         self.active = Some(Annotation {
+            id: self.next_id,
+            stroke: (self.tool == Tool::Pen)
+                .then(|| Stroke::new(point, 3. * scale, pressure, time)),
             tool: self.tool,
             points: vec![point],
             number,
             width: 3.0 * scale,
         });
     }
+    #[cfg(test)]
     pub fn update(&mut self, point: Point) {
+        self.update_sample(point, None, 0);
+    }
+    pub fn update_sample(&mut self, point: Point, pressure: Option<f32>, time: u32) {
         if let Some(a) = &mut self.active {
             if a.tool == Tool::Pen {
-                if a.points.last().unwrap().distance(point) >= 0.5 {
+                a.stroke.as_mut().unwrap().push(point, pressure, time);
+                if *a.points.last().unwrap() != point {
                     a.points.push(point);
                 }
             } else if a.tool != Tool::Number {
@@ -140,6 +158,7 @@ impl Document {
         }
     }
     pub fn reset(&mut self) {
+        self.cache_epoch += 1;
         self.finish();
         if !self.annotations.is_empty() {
             self.undo
@@ -148,6 +167,7 @@ impl Document {
         }
     }
     pub fn undo(&mut self) {
+        self.cache_epoch += 1;
         self.active = None;
         match self.undo.pop() {
             Some(Undo::Draw) => self.redo.push(Redo::Draw(self.annotations.pop().unwrap())),
@@ -159,6 +179,7 @@ impl Document {
         }
     }
     pub fn redo(&mut self) {
+        self.cache_epoch += 1;
         if self.active.is_none() {
             match self.redo.pop() {
                 Some(Redo::Draw(annotation)) => {

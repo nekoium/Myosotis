@@ -1,0 +1,26 @@
+param([Parameter(Mandatory=$true)][string]$Exe, [switch]$Shapes, [switch]$History, [string]$ResultName = 'stroke-functions', [int]$Repeat = 1)
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+# Materialize clipboard formats before the smoke check replaces their owner.
+$original = [Windows.Forms.Clipboard]::GetDataObject()
+$backup = New-Object Windows.Forms.DataObject
+if ($null -ne $original) {
+    foreach ($format in $original.GetFormats($false)) {
+        $value = $original.GetData($format,$false)
+        if ($value -is [IO.MemoryStream]) { $value = New-Object IO.MemoryStream(,$value.ToArray()) }
+        elseif ($value -is [ICloneable]) { $value = $value.Clone() }
+        if ($null -ne $value) { $backup.SetData($format,$false,$value) }
+    }
+}
+try {
+    if ($Shapes -or $History) {
+        $density = -2
+        if ($History) { $density = -4 }
+        & "$PSScriptRoot/Run.ps1" -Executable $Exe -ResultName $ResultName -Densities @($density) -Repeat $Repeat
+    } else {
+        & "$PSScriptRoot/../Smoke-Test.ps1" -Exe $Exe
+    }
+} finally {
+    [Windows.Forms.Clipboard]::SetDataObject($backup,$true)
+}

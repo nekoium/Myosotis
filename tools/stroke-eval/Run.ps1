@@ -1,0 +1,23 @@
+param(
+    [ValidateSet('Baseline','Clean','Natural')][string]$Direction = 'Baseline',
+    [int[]]$Densities = @(0,5,25),
+    [int]$Frames = 12,
+    [int]$Repeat = 1,
+    [string]$Executable,
+    [string]$ResultName,
+    [ValidateRange(1,60)][int]$Seconds = 2
+)
+# Diagnostic spike: drives only a process it starts. Modes -2/-4 test copying; use Check-Functions.ps1 to preserve clipboard formats.
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$root = [IO.Path]::GetFullPath("$PSScriptRoot/../..")
+Add-Type -Path "$PSScriptRoot/Probe.cs" -ReferencedAssemblies System.Windows.Forms,System.Drawing
+$exe = Join-Path $root ".tmp/stroke-trials/$($Direction.ToLowerInvariant())/myosotis.exe"
+if ($Executable) { $exe = [IO.Path]::GetFullPath($Executable) }
+if (-not $ResultName) { $ResultName = $Direction.ToLowerInvariant() }
+if ($ResultName -notmatch '^[a-zA-Z0-9_-]+$') { throw 'ResultName must be a simple folder name' }
+$folder = Join-Path $root ".tmp/stroke-eval/results/$ResultName-$Repeat"
+if (Test-Path $folder) { throw "Results already exist: $folder" }
+[IO.Directory]::CreateDirectory($folder) | Out-Null
+[StrokeProbe]::Run($exe, $folder, $Densities, $Frames, $Seconds)

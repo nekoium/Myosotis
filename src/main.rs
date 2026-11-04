@@ -2,6 +2,7 @@
 mod document;
 #[cfg(any(windows, test))]
 mod settings;
+mod stroke;
 #[cfg(windows)]
 mod windows;
 

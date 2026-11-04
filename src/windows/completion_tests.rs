@@ -24,6 +24,8 @@ fn app() -> App {
         click_start: None,
         pending_click: None,
         space: false,
+        pen_id: None,
+        pen_clock: 0,
         hover: None,
         hint: String::new(),
         tray: NOTIFYICONDATAW::default(),

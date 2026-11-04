@@ -8,7 +8,7 @@ Make visual feedback for coding agents faster to communicate: invoke from anywhe
 
 ## Product requirements
 
-- Blazing fast; performance must not be compromised for portability.
+- **Blazing fast is the first principle.** Responsiveness takes precedence over visual effects, feature additions, and portability. No aesthetic improvement justifies slower drawing, invocation, or completion.
 - Available through a global hotkey.
 - Minimal, clean interface that does not interrupt the current workflow.
 - Windows first; macOS and Linux support planned.
@@ -54,7 +54,7 @@ Make visual feedback for coding agents faster to communicate: invoke from anywhe
 ## Open interaction decisions
 
 - Simultaneous mouse, keyboard, and stylus input behavior beyond ordinary single-input use.
-- Stylus pressure and eraser support.
+- Stylus eraser support and qualification of real pressure-sensitive hardware.
 - Accessibility and final toolbar placement.
 
 ## Implementation architecture
@@ -98,6 +98,18 @@ Use a shared Rust core with native implementations for each platform. Share the 
 - Define the Linux distribution/dependency baseline before promising portable bundles. A broadly self-contained AppImage may exceed the budget.
 - These are acceptance targets, not measured claims. No native release artifact has established feasibility yet.
 
+### Performance acceptance rule
+
+Performance is a release-blocking requirement, not a tradeoff to balance against appearance. Drawing must stay immediate during rapid input, long continuous strokes, and many accumulated annotations. A perceptible regression from the pre-change version blocks acceptance of a change, even if the result looks better. Do not accept effects that cause the canvas to become progressively slower as a drawing grows.
+
+Compare candidate changes with the pre-change executable on the same hardware, canvas size, display scaling, and input device. Check responsiveness both on an empty canvas and after sustained fast drawing and many strokes. Functional tests and static example images do not establish interactive performance. Record the comparison and resolve regressions before selecting or shipping a direction.
+
+Stroke refinements must preserve the captured path. Do not use artificial position smoothing, prediction, or curve fitting to hide missing motion caused by slow input or rendering. Natural is the approved default: tapered endpoints and mild speed-based width variation for mouse drawing, with valid stylus pressure taking precedence over simulated pressure. Its behavior stays consistent across workloads. Clean remains a diagnostic comparison; Brush is retired. Performance fixes must also preserve handwriting detail, intentional corners, valid pressure data, undo/redo, selection geometry, and matching preview/export.
+
+The user selected Natural and approved its speed/stress testing. See [the measured results and approval](docs/STROKE-INCREMENTAL-RESULTS.md) for the evidence and remaining validation limits. This approval does not establish that every proposed numeric budget or hardware qualification has passed.
+
+Keep stroke styling consistent across workloads. Do not automatically disable effects, change stroke styles, or switch to baseline styling under load. Reject an effect that cannot pass the performance evaluation; retain the accepted baseline until a candidate qualifies. Internal rendering caches may change how ink is drawn, but must not change its appearance or captured trajectory. See [the reproduced failures](docs/STROKE-PERFORMANCE-FINDINGS.md) and [the proposed eval](docs/STROKE-PERFORMANCE-EVAL.md); the latter's numeric budgets remain proposals.
+
 ### Runtime behavior
 
 - Resident process; keep disk I/O and image encoding out of the drawing path.
@@ -117,7 +129,7 @@ Use a shared Rust core with native implementations for each platform. Share the 
 
 The finalized Windows interface defaults to a compact dark rectangular toolbar with rounded corners, no perimeter outline, and no shadow. Six 40-DIP cells contain vector icons for pen, arrow, rectangle, numbered mark, Copy, and Cancel. Neutral fills identify the selected tool and hovered controls; periwinkle (`#5865D8`) emphasizes Copy and colors selection borders and resize handles. The existing guidance surface uses the same dark treatment, a shorter persistent hint, and contextual tool descriptions on hover. Keyboard shortcuts, completion gestures, and toolbar placement remain unchanged.
 
-Annotation defaults use coral ink, rounded pen and arrow caps, finer arrows and rectangle outlines, and compact numbered markers. Overlay rendering and clipboard export share these defaults. No animations or background sampling are added.
+Annotation defaults use refined coral ink (`#C74656`), rounded pen and arrow caps, finer arrows and rectangle outlines, and compact numbered markers. Number labels use system Segoe UI Semibold at 14 DIP, centered on their visible glyph bounds inside 24-DIP-high badges. Badges widen for multiple digits with at least 8 DIP of horizontal space on each side of the visible numeral group. Cache number layouts for the renderer lifetime so ordinary pen updates do not repeat text measurement. Overlay rendering and clipboard export share these defaults. Existing toolbar icons and application icon assets remain unchanged. No animations or background sampling are added. See the [approved palette design](docs/superpowers/specs/2026-11-04-annotation-palette-design.md), related to [issue #4](https://github.com/nekoium/Myosotis/issues/4).
 
 ### Appearance preference
 
@@ -151,4 +163,4 @@ Unresolved problems, candidate approaches, and implementation discussion belong 
 
 This document records the product design and native architecture decision. The Windows MVP now implements the capture → annotate → clipboard workflow, resident tray integration, and the interaction defaults above. The document model is platform-independent Rust; Windows API calls are isolated in `src/windows/`. Release builds statically link the C runtime and embed an application icon, version information, and a per-monitor DPI awareness manifest. `tools/Package.ps1` builds the complete portable package and enforces the download and installed size budgets.
 
-The earlier Python implementation remains locally as an interaction reference. Native macOS and Linux implementations, pressure/eraser support, full toolbar accessibility, HDR handling, and broad multi-monitor validation remain future work. Windows integration and performance evidence are recorded in `docs/VALIDATION.md`.
+The earlier Python implementation remains locally as an interaction reference. Native macOS and Linux implementations, stylus eraser support, real stylus qualification, full toolbar accessibility, HDR handling, and broad multi-monitor validation remain future work. Windows integration and performance evidence are recorded in `docs/VALIDATION.md`.

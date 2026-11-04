@@ -14,7 +14,12 @@ use ::windows::{
         Foundation::*,
         Graphics::Gdi::*,
         System::{Com::*, LibraryLoader::*},
-        UI::{HiDpi::*, Input::KeyboardAndMouse::*, Shell::*, WindowsAndMessaging::*},
+        UI::{
+            HiDpi::*,
+            Input::{KeyboardAndMouse::*, Pointer::*},
+            Shell::*,
+            WindowsAndMessaging::*,
+        },
     },
 };
 use std::{
@@ -29,6 +34,7 @@ const DOUBLE_CLICK_TIME: Duration = Duration::from_millis(250);
 enum Input {
     Mouse,
     Space,
+    Pen,
 }
 #[derive(Clone, Copy)]
 struct Click {
@@ -76,6 +82,8 @@ struct App {
     click_start: Option<Click>,
     pending_click: Option<Click>,
     space: bool,
+    pen_id: Option<u32>,
+    pen_clock: u64,
     hover: Option<(u8, Instant)>,
     hint: String,
     tray: NOTIFYICONDATAW,
@@ -124,6 +132,8 @@ impl App {
             self.scale,
             self.theme,
         )?);
+        self.pen_id = None;
+        self.pen_clock = 0;
         self.doc = Document::default();
         self.gesture = None;
         self.click_start = None;
@@ -146,6 +156,8 @@ impl App {
         self.pending_click = None;
         self.gesture = None;
         self.space = false;
+        self.pen_id = None;
+        self.pen_clock = 0;
         self.doc = Document::default();
         let _ = ReleaseCapture();
         let _ = KillTimer(self.hwnd, 1);
@@ -250,10 +262,19 @@ impl App {
         })
     }
     unsafe fn down(&mut self, blank: bool, input: Input) {
+        self.down_sample(blank, input, self.cursor(), None, GetMessageTime() as u32);
+    }
+    unsafe fn down_sample(
+        &mut self,
+        blank: bool,
+        input: Input,
+        p: Point,
+        pressure: Option<f32>,
+        time: u32,
+    ) {
         if !self.visible || self.gesture.is_some() || self.space {
             return;
         }
-        let p = self.cursor();
         self.pointer = p;
         let toolbar = self.toolbar().is_some_and(|bar| bar.contains(p));
         let resizing = self.doc.selection.is_some_and(|selection| {
@@ -309,7 +330,7 @@ impl App {
                     edge: self.hover.unwrap().0,
                 });
             } else {
-                self.doc.begin(p, self.scale);
+                self.doc.begin_sample(p, self.scale, pressure, time);
                 // Outside clicks still participate in completion, but create no ink.
                 self.gesture = Some(Gesture::Draw);
                 self.click_start = Some(Click {
@@ -326,10 +347,19 @@ impl App {
         self.repaint();
     }
     unsafe fn up(&mut self, blank: bool, input: Input) {
+        self.up_sample(blank, input, self.cursor(), None, GetMessageTime() as u32);
+    }
+    unsafe fn up_sample(
+        &mut self,
+        blank: bool,
+        input: Input,
+        p: Point,
+        pressure: Option<f32>,
+        time: u32,
+    ) {
         if self.space != (input == Input::Space) {
             return;
         }
-        let p = self.cursor();
         match self.gesture {
             Some(Gesture::Select {
                 start,
@@ -346,7 +376,9 @@ impl App {
                 }
             }
             Some(Gesture::Draw) if !blank => {
-                self.doc.update(p);
+                if input != Input::Pen {
+                    self.doc.update_sample(p, pressure, time);
+                }
             }
             Some(Gesture::Resize { original, edge }) if !blank => {
                 self.doc.selection = Some(resize(original, edge, p, self.full, 1.))
@@ -366,7 +398,9 @@ impl App {
         self.repaint();
     }
     unsafe fn moved(&mut self) {
-        let p = self.cursor();
+        self.moved_sample(self.cursor(), None, GetMessageTime() as u32);
+    }
+    unsafe fn moved_sample(&mut self, p: Point, pressure: Option<f32>, time: u32) {
         self.pointer = p;
         if self.click_start.is_some_and(|click| {
             (p.x - click.point.x).abs() + (p.y - click.point.y).abs() >= 6. * self.scale
@@ -374,12 +408,12 @@ impl App {
             self.click_start = None;
         }
         match self.gesture {
-            Some(Gesture::Draw) => self.doc.update(p),
+            Some(Gesture::Draw) => self.doc.update_sample(p, pressure, time),
             Some(Gesture::Resize { original, edge }) => {
                 self.doc.selection = Some(resize(original, edge, p, self.full, 1.))
             }
             Some(Gesture::Select { .. }) => {}
-            None if self.space => self.doc.update(p),
+            None if self.space => self.doc.update_sample(p, pressure, time),
             None => {
                 let edge = self
                     .doc
@@ -603,6 +637,87 @@ impl App {
             }
         }
     }
+    unsafe fn pen_message(&mut self, msg: u32, id: u32) -> bool {
+        let mut kind = POINTER_INPUT_TYPE::default();
+        if GetPointerType(id, &mut kind).is_err() || kind != PT_PEN {
+            return false;
+        }
+        let mut pen = POINTER_PEN_INFO::default();
+        if GetPointerPenInfo(id, &mut pen).is_err() {
+            return true;
+        }
+        if pen.pointerInfo.pointerFlags.0 & POINTER_FLAG_CANCELED.0 != 0 {
+            if self.pen_id == Some(id) {
+                self.pen_id = None;
+                self.pen_clock = 0;
+                self.doc.finish();
+                self.gesture = None;
+                self.click_start = None;
+                self.repaint();
+            }
+            return true;
+        }
+        let origin = self.origin;
+        let position = |pen: &POINTER_PEN_INFO| {
+            Point::new(
+                (pen.pointerInfo.ptPixelLocation.x - origin.x) as f32,
+                (pen.pointerInfo.ptPixelLocation.y - origin.y) as f32,
+            )
+        };
+        let pressure = |pen: &POINTER_PEN_INFO| {
+            (pen.penMask & PEN_MASK_PRESSURE != 0).then_some(pen.pressure.min(1024) as f32 / 1024.)
+        };
+        if msg == WM_POINTERDOWN {
+            if self.pen_id.is_some() || self.gesture.is_some() || self.space {
+                return true;
+            }
+            self.pen_id = Some(id);
+            self.pen_clock = pen.pointerInfo.PerformanceCount;
+            self.down_sample(
+                false,
+                Input::Pen,
+                position(&pen),
+                pressure(&pen),
+                pen.pointerInfo.dwTime,
+            );
+            return true;
+        }
+        if self.pen_id != Some(id) {
+            return true;
+        }
+        let mut count = pen.pointerInfo.historyCount.max(1);
+        let mut history = vec![POINTER_PEN_INFO::default(); count as usize];
+        if GetPointerPenInfoHistory(id, &mut count, Some(history.as_mut_ptr())).is_err() {
+            history = vec![pen];
+        } else {
+            history.truncate(count as usize);
+        }
+        for sample in history.iter().rev() {
+            let clock = sample.pointerInfo.PerformanceCount;
+            if clock != 0 && clock <= self.pen_clock {
+                continue;
+            }
+            self.moved_sample(
+                position(sample),
+                pressure(sample),
+                sample.pointerInfo.dwTime,
+            );
+            self.pen_clock = clock;
+        }
+        if msg == WM_POINTERUP {
+            // The final history sample is already applied; do not substitute mouse coordinates or pressure.
+            self.up_sample(
+                false,
+                Input::Pen,
+                position(&pen),
+                pressure(&pen),
+                pen.pointerInfo.dwTime,
+            );
+            self.pen_id = None;
+            self.pen_clock = 0;
+        }
+        true
+    }
     unsafe fn message(&mut self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option<LRESULT> {
         match msg {
             WM_HOTKEY if wparam.0 == HOTKEY as usize => {
@@ -612,6 +727,31 @@ impl App {
             }
             WM_PAINT => self.paint(),
             WM_ERASEBKGND => return Some(LRESULT(1)),
+            WM_POINTERDOWN | WM_POINTERUPDATE | WM_POINTERUP if self.visible => {
+                if self.pen_message(msg, wparam.0 as u32 & 0xffff) {
+                    return Some(LRESULT(0));
+                }
+                return None;
+            }
+            WM_CAPTURECHANGED if self.gesture.is_some() => {
+                self.doc.finish();
+                self.gesture = None;
+                self.space = false;
+                self.pen_id = None;
+                self.click_start = None;
+                self.repaint();
+            }
+            WM_POINTERCAPTURECHANGED if self.pen_id.is_some() => {
+                self.pen_id = None;
+                self.pen_clock = 0;
+                self.doc.finish();
+                self.gesture = None;
+                self.click_start = None;
+                self.repaint();
+            }
+            WM_LBUTTONDOWN | WM_LBUTTONUP | WM_MOUSEMOVE
+                if self.pen_id.is_some()
+                    || (GetMessageExtraInfo().0 as usize & 0xffffff80) == 0xff515700 => {}
             WM_LBUTTONDOWN => self.down(false, Input::Mouse),
             WM_RBUTTONDOWN => self.down(true, Input::Mouse),
             WM_LBUTTONUP => self.up(false, Input::Mouse),
@@ -635,6 +775,8 @@ impl App {
                 self.up(false, Input::Space);
             }
             WM_KILLFOCUS if self.visible => {
+                self.pen_id = None;
+                self.pen_clock = 0;
                 self.flush_click();
                 self.click_start = None;
                 self.doc.finish();
@@ -777,6 +919,8 @@ pub fn run() -> Result<()> {
                 click_start: None,
                 pending_click: None,
                 space: false,
+                pen_id: None,
+                pen_clock: 0,
                 hover: None,
                 hint: String::new(),
                 tray,
