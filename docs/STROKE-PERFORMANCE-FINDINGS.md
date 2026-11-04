@@ -20,7 +20,7 @@ Artificial path smoothing is not a remedy for these failures. The user's constra
 - All builds use identical deterministic history preparation. Repainting is disabled only during untimed preparation, then enabled for measurements. The pointer is moved and native mouse messages dispatched; an additional real OS `SendInput` replay tests the visible path.
 - The revised real-input driver sends 481 positions over two seconds (nominally 240 Hz), with actual injection timestamps saved. Maximum scheduling lateness in the matched third runs was below 0.2 ms. Earlier exploratory runs used a sleep-based driver with about 13 ms of scheduling jitter; they independently showed the regression but are not the matched table below.
 
-Hardware and binary hashes are local artifacts under `.tmp/stroke-eval/`. The diagnostic runner is [Run.ps1](../tools/stroke-eval/Run.ps1), backed by [Probe.cs](../tools/stroke-eval/Probe.cs).
+Hardware and binary hashes are local artifacts under `.tmp/stroke-eval/`. The diagnostic runner is [Run.ps1](../tools/stroke-eval/Run.ps1), now backed by the [Rust probe](../tools/native/src/probe.rs). The measurements below used the original C# probe from commit `0e0df66`; see the [migration record](RUST-TOOLS-MIGRATION.md).
 
 ## Matched results
 

@@ -1,10 +1,9 @@
-param([string]$Root = "$PSScriptRoot/../..")
-$ErrorActionPreference='Stop'
-Add-Type -AssemblyName System.Drawing,System.Windows.Forms.DataVisualization
-Add-Type -Path "$PSScriptRoot/Showcase.cs" -ReferencedAssemblies System.Drawing,System.Windows.Forms,System.Windows.Forms.DataVisualization
-$rootPath=[IO.Path]::GetFullPath($Root)
-$summary=Get-Content (Join-Path $rootPath 'docs/releases/0.2.0/performance.json') -Raw|ConvertFrom-Json
-[double[]]$before=@(0,25,100,250)|ForEach-Object{$summary.builds.baseline.densities."$_".paintP95}
-[double[]]$after=@(0,25,100,250)|ForEach-Object{$summary.builds.natural.densities."$_".paintP95}
-[ReleaseShowcase]::Run($rootPath,$before,$after)
-Get-ChildItem (Join-Path $rootPath 'docs/releases/0.2.0/*.png')|Select-Object Name,Length
+param([string]$Root = "$PSScriptRoot/../..", [string]$OutputDirectory)
+$ErrorActionPreference = 'Stop'
+$tool = & "$PSScriptRoot/../native/Build.ps1" -Tool release-showcase
+$rootPath = [IO.Path]::GetFullPath($Root)
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $rootPath 'docs/releases/0.2.0' }
+$outputPath = [IO.Path]::GetFullPath($OutputDirectory)
+& $tool $rootPath $outputPath
+if ($LASTEXITCODE -ne 0) { throw 'Release showcase generation failed' }
+Get-ChildItem (Join-Path $outputPath '*.png') | Select-Object Name,Length

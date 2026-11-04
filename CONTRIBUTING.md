@@ -56,6 +56,20 @@ Like the smoke check, it requires an interactive desktop, takes focus and pointe
 
 `tools/Verify-Clipboard.ps1` decodes a CF_DIB currently on the clipboard into `.tmp/clipboard.png` for diagnosis. Do not publish captures containing private information. The `ExecutionPolicy Bypass` flag applies to this PowerShell process only; these commands do not change the machine's execution policy.
 
+## Native development tools
+
+The stroke replay probe and release image compositor are Rust binaries in `tools/native`, separate from the application build and portable package. Their PowerShell entry points build the required release binary with the checked-in lockfile. The probe still requires `-Interactive` and exclusive desktop availability.
+
+Check this separate Cargo package when changing these tools:
+
+```powershell
+cargo fmt --manifest-path tools/native/Cargo.toml --check
+cargo clippy --manifest-path tools/native/Cargo.toml --locked --all-targets -- -D warnings
+cargo test --manifest-path tools/native/Cargo.toml --locked
+```
+
+See [the migration record](docs/RUST-TOOLS-MIGRATION.md) for output comparisons, measured timings, and remaining interactive qualification.
+
 ## Package
 
 ```powershell
