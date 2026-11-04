@@ -8,7 +8,7 @@ The softer palette and larger-center alternatives were considered; A retains the
 
 `tools/New-Icon.ps1` is the source of truth. It uses Windows System.Drawing without downloaded assets or fonts. The design occupies a 256-unit canvas and is rendered at four times that resolution before downsampling.
 
-Each petal uses the same closed path, translated to `(128, 128)` and rotated by successive 72-degree steps:
+Each petal uses the same closed path, translated to `(128, 128)`, uniformly scaled by `1.16`, and rotated by successive 72-degree steps. The center uses the same translation and scale. This enlarges the entire flower by 16% within the existing canvas while preserving A's proportions and leaving transparent clearance around the tips:
 
 ```text
 M -13,-4
@@ -23,6 +23,7 @@ Petal colors in drawing order are `#648DF0`, `#7EA3F8`, `#6B95F2`, `#86AAF7`, an
 ## Generated assets
 
 - `assets/myosotis.ico`: transparent PNG frames at 16, 32, 48, and 256 pixels, embedded by the existing Windows resource build.
-- `assets/myosotis.png`: the same 256-pixel frame for the README and other project branding.
+- `assets/myosotis.svg`: the same paths, transforms, and palette as vector artwork for the README.
+- `assets/myosotis.png`: the same 256-pixel frame for raster uses.
 
-Regenerate both assets with the icon command in [CONTRIBUTING.md](../CONTRIBUTING.md). Keep them synchronized with the generator. The README displays the flower beside its heading; GitHub's own repository-name header does not support a custom repository icon.
+Regenerate all three assets with the icon command in [CONTRIBUTING.md](../CONTRIBUTING.md). Keep them synchronized with the generator. The README displays the SVG beside its heading using GitHub's supported `align="absmiddle"` attribute to avoid baseline alignment. GitHub's own repository-name header does not support a custom repository icon.

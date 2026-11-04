@@ -11,6 +11,7 @@ try {
         $g.ResetTransform()
         $g.ScaleTransform(4,4)
         $g.TranslateTransform(128,128)
+        $g.ScaleTransform(1.16,1.16)
         $g.RotateTransform($i*72)
         $petal = New-Object Drawing.SolidBrush ([Drawing.ColorTranslator]::FromHtml($colors[$i]))
         $path = New-Object Drawing.Drawing2D.GraphicsPath
@@ -24,8 +25,10 @@ try {
     }
     $g.ResetTransform()
     $g.ScaleTransform(4,4)
+    $g.TranslateTransform(128,128)
+    $g.ScaleTransform(1.16,1.16)
     $center = New-Object Drawing.SolidBrush ([Drawing.ColorTranslator]::FromHtml('#F5C85C'))
-    try { $g.FillEllipse($center,105,105,46,46) } finally { $center.Dispose() }
+    try { $g.FillEllipse($center,-23,-23,46,46) } finally { $center.Dispose() }
 } finally { $g.Dispose() }
 $images = @()
 try {
@@ -58,3 +61,13 @@ try {
     }
     foreach ($image in $images) { $writer.Write([byte[]]$image.Data) }
 } finally { $writer.Dispose();$file.Dispose() }
+
+# Export the same paths and palette for sharp README rendering at any scale.
+$svg = @('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">',
+    '  <g transform="translate(128 128) scale(1.16)">')
+for ($i=0; $i -lt 5; $i++) {
+    $angle = $i*72
+    $svg += "    <path fill=""$($colors[$i])"" transform=""rotate($angle)"" d=""M-13-4C-48-28-51-62-34-87C-13-115 35-103 41-76C49-48 28-12-13-4Z""/>"
+}
+$svg += @('    <circle r="23" fill="#F5C85C"/>', '  </g>', '</svg>')
+[IO.File]::WriteAllText("$PSScriptRoot/../assets/myosotis.svg", ($svg -join "`n") + "`n")
