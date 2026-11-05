@@ -15,7 +15,7 @@ try {
     Copy-Item 'README.md','LICENSE','THIRD_PARTY_NOTICES.md' $folder -Force
     $images = Join-Path $folder 'docs/images'
     [void][IO.Directory]::CreateDirectory($images)
-    Copy-Item 'docs/images/myosotis-light.png','docs/images/myosotis-dark.png','docs/images/input-schema.png' $images -Force
+    Copy-Item 'docs/images/myosotis-light.png','docs/images/myosotis-dark.png','docs/images/input-schema.png','docs/images/input-schema-light.png' $images -Force
     $installedBytes = (Get-ChildItem $folder -Recurse -File | Measure-Object Length -Sum).Sum
     if ($installedBytes -ge 20000000) { throw "Installed package exceeds 20 MB: $installedBytes bytes" }
     $archive = Join-Path (Get-Location) "dist/Myosotis-$version-windows-x64.zip"

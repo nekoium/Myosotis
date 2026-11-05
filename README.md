@@ -18,7 +18,7 @@ The default dark toolbar stays consistent across light and dark screenshots. The
 
 ## Get started
 
-![Input schema: view capture, drawing, copy, and history shortcuts in one window](docs/images/input-schema.png)
+![Input schema: view capture, drawing, copy, and history shortcuts in one window](docs/images/input-schema-light.png)
 
 The native MVP supports **Windows 11 x64**. Download [version 0.2.1](https://github.com/nekoium/Myosotis/releases/tag/v0.2.1), extract the ZIP, and run `Myosotis/myosotis.exe`. It is a portable app using Windows graphics and image facilities; no additional application runtime is required. The executable is currently unsigned. macOS and Linux are planned.
 

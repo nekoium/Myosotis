@@ -6,7 +6,7 @@ A quick screenshot should fit the way you work. Myosotis 0.2.1 puts your control
 
 Click the flower in your notification area to open **Input schema**. See your capture, drawing, copy, and history shortcuts at a glance. Click a keycap, press your preferred key, and keep going. Your changes save automatically, ready for the next capture.
 
-![Input schema: your capture and annotation shortcuts in one place](https://raw.githubusercontent.com/nekoium/Myosotis/v0.2.1/docs/images/input-schema.png)
+![Input schema: your capture and annotation shortcuts in one place](https://raw.githubusercontent.com/nekoium/Myosotis/master/docs/images/input-schema-light.png)
 
 ## A little guidance, always close
 
