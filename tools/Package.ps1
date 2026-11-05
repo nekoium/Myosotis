@@ -6,18 +6,18 @@ try {
     if ($hostTriple -ne 'x86_64-pc-windows-msvc') { throw 'This release script currently supports the Windows x64 MSVC toolchain.' }
     & cargo build --locked --release
     if ($LASTEXITCODE -ne 0) { throw 'Release build failed' }
+    $metadata = (& cargo metadata --no-deps --format-version 1 | ConvertFrom-Json)
+    if ($LASTEXITCODE -ne 0) { throw 'Could not read package metadata' }
+    $version = ($metadata.packages | Where-Object name -eq 'myosotis').version
     $folder = Join-Path (Get-Location) 'dist/Myosotis'
     [void][IO.Directory]::CreateDirectory($folder)
-    Copy-Item 'target/release/myosotis.exe' $folder -Force
+    Copy-Item (Join-Path $metadata.target_directory 'release/myosotis.exe') $folder -Force
     Copy-Item 'README.md','LICENSE','THIRD_PARTY_NOTICES.md' $folder -Force
     $images = Join-Path $folder 'docs/images'
     [void][IO.Directory]::CreateDirectory($images)
-    Copy-Item 'docs/images/myosotis-light.png','docs/images/myosotis-dark.png' $images -Force
+    Copy-Item 'docs/images/myosotis-light.png','docs/images/myosotis-dark.png','docs/images/input-schema.png' $images -Force
     $installedBytes = (Get-ChildItem $folder -Recurse -File | Measure-Object Length -Sum).Sum
     if ($installedBytes -ge 20000000) { throw "Installed package exceeds 20 MB: $installedBytes bytes" }
-    $metadata = (& cargo metadata --no-deps --format-version 1 | ConvertFrom-Json)
-    if ($LASTEXITCODE -ne 0) { throw 'Could not read package version' }
-    $version = ($metadata.packages | Where-Object name -eq 'myosotis').version
     $archive = Join-Path (Get-Location) "dist/Myosotis-$version-windows-x64.zip"
     Compress-Archive -Path $folder -DestinationPath $archive -Force
     $downloadBytes = (Get-Item $archive).Length
