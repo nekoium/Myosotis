@@ -1,6 +1,8 @@
 mod capture;
 #[cfg(test)]
 mod completion_tests;
+#[cfg(test)]
+mod input_tests;
 mod render;
 mod startup;
 
@@ -16,7 +18,7 @@ use ::windows::{
         System::{Com::*, LibraryLoader::*},
         UI::{
             HiDpi::*,
-            Input::{KeyboardAndMouse::*, Pointer::*},
+            Input::{Ime::*, KeyboardAndMouse::*, Pointer::*},
             Shell::*,
             WindowsAndMessaging::*,
         },
@@ -831,6 +833,17 @@ pub fn show_error(message: &str) {
     }
 }
 
+unsafe fn disable_ime(hwnd: HWND) -> Result<()> {
+    // Detach only this non-text window; leave the user's input layout and IME mode untouched.
+    if !ImmAssociateContextEx(hwnd, HIMC::default(), 0).as_bool() {
+        return Err(Error::new(
+            E_FAIL,
+            "Could not disable IME for capture shortcuts",
+        ));
+    }
+    Ok(())
+}
+
 pub fn run() -> Result<()> {
     unsafe {
         let _ = SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -869,6 +882,10 @@ pub fn run() -> Result<()> {
             instance,
             None,
         )?;
+        if let Err(error) = disable_ime(hwnd) {
+            let _ = DestroyWindow(hwnd);
+            return Err(error);
+        }
         if let Err(e) = RegisterHotKey(
             hwnd,
             HOTKEY,

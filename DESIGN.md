@@ -40,6 +40,7 @@ Make visual feedback for coding agents faster to communicate: invoke from anywhe
 
 - Escape: cancel and close.
 - Global hotkey: initiate the workflow.
+- Overlay shortcuts work with CJK input enabled. The Windows overlay has no text input and detaches its IME context without changing the user's input layout or IME mode. See [issue #9](https://github.com/nekoium/Myosotis/issues/9).
 
 ## Prototype defaults — subject to user testing
 
