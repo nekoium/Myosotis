@@ -724,11 +724,8 @@ impl Renderer {
             window.focus,
             window.listening,
             window.hover,
-            window.keyboard_focus,
-            &window.error,
         )
     }
-    #[allow(clippy::too_many_arguments)]
     unsafe fn paint_schema_on(
         &self,
         target: &ID2D1RenderTarget,
@@ -736,10 +733,8 @@ impl Renderer {
         focus: Option<usize>,
         listening: Option<usize>,
         hover: Option<usize>,
-        keyboard_focus: bool,
-        error: &str,
     ) -> Result<()> {
-        use super::schema::{self, HEIGHT, WIDTH};
+        use super::schema::{self, WIDTH};
         let (surface, foreground, key, selected, muted) = match self.theme {
             Theme::Dark => (
                 color(0.14, 0.14, 0.15, 1.),
@@ -957,7 +952,7 @@ impl Renderer {
                 },
                 4.,
             );
-            if focus == Some(index) {
+            if focus == Some(index) && listening != Some(index) {
                 outline(Rect {
                     left: r.left - 2.,
                     top: r.top - 2.,
@@ -992,64 +987,6 @@ impl Renderer {
             self.scale,
             None,
         );
-        if !error.is_empty() {
-            text(
-                error,
-                Rect {
-                    left: 16.,
-                    top: HEIGHT + 2.,
-                    right: WIDTH - 16.,
-                    bottom: HEIGHT + 53.,
-                },
-                &fg,
-                false,
-            )?;
-        }
-        if keyboard_focus {
-            if let Some(index) = focus.filter(|&i| i >= 10 || listening == Some(i)) {
-                let (hint, anchor) = match index {
-                    10 => ("Reset all shortcuts".to_owned(), schema::reset_rect()),
-                    11 => ("Close".to_owned(), schema::close_rect()),
-                    i => {
-                        let hint = if i == 0 {
-                            "Press a shortcut · Esc cancels".into()
-                        } else {
-                            "Press a single key · Esc cancels".into()
-                        };
-                        (hint, keys[i])
-                    }
-                };
-                let format = self.write.CreateTextFormat(
-                    w!("Segoe UI"),
-                    None,
-                    DWRITE_FONT_WEIGHT_NORMAL,
-                    DWRITE_FONT_STYLE_NORMAL,
-                    DWRITE_FONT_STRETCH_NORMAL,
-                    11. * self.scale,
-                    w!("en-us"),
-                )?;
-                let chars: Vec<u16> = hint.encode_utf16().collect();
-                let layout = self.write.CreateTextLayout(
-                    &chars,
-                    &format,
-                    (WIDTH - 40.) * self.scale,
-                    40. * self.scale,
-                )?;
-                let mut metrics = DWRITE_TEXT_METRICS::default();
-                layout.GetMetrics(&mut metrics)?;
-                let width = metrics.width / self.scale + 16.;
-                let left =
-                    ((anchor.left + anchor.right - width) / 2.).clamp(8., WIDTH - width - 8.);
-                let bounds = Rect {
-                    left,
-                    top: anchor.bottom + 8.,
-                    right: left + width,
-                    bottom: anchor.bottom + 33.,
-                };
-                fill(bounds, &selected_brush, 4.);
-                text(&hint, bounds, &fg, true)?;
-            }
-        }
         target.EndDraw(None, None)
     }
     pub unsafe fn paint(

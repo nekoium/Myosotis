@@ -48,7 +48,7 @@ Right-click the notification-area icon and choose **Input schema** to view or ch
 
 Capture accepts a key combined with Ctrl, Alt, or Win. The capture overlay uses single keys. Space drawing, Enter completion, and mouse gestures remain fixed; Space, Enter, and Tab cannot be reassigned. The window shows each action's primary shortcut. The restore icon beside Close resets all shortcuts, including Capture, without changing theme or startup preferences. It is disabled when the defaults are active.
 
-Shortcuts save immediately to `%LOCALAPPDATA%\Myosotis\settings.toml`. Conflicts, unsupported keys, and failed saves leave the previous shortcuts active. If a saved global shortcut is unavailable at startup, Myosotis tries Ctrl+Alt+S and reports the fallback. If neither can be registered, it reports the conflict and exits. The controls below show defaults.
+Shortcuts save immediately to `%LOCALAPPDATA%\Myosotis\settings.toml`. Conflicts, unsupported keys, and failed saves silently leave the previous shortcuts active. If a saved global shortcut is unavailable at startup, Myosotis tries Ctrl+Alt+S and reports the fallback. If neither can be registered, it reports the conflict and exits. The controls below show defaults.
 
 ### Appearance and settings
 

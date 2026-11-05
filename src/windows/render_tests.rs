@@ -161,7 +161,7 @@ fn schema_renders_both_themes_and_recording_at_common_dpi_without_desktop_input(
                 );
                 assert_eq!(keys[7].top, 248.);
                 assert_eq!(super::super::schema::HEIGHT - keys[7].bottom, 21.);
-                renderer.paint_schema_on(&target, &bindings, None, None, None, false, "")?;
+                renderer.paint_schema_on(&target, &bindings, None, None, None)?;
                 let pixel = |x: f32, y: f32| {
                     let index =
                         (((y * scale) as usize) * width as usize + (x * scale) as usize) * 4;
@@ -196,21 +196,8 @@ fn schema_renders_both_themes_and_recording_at_common_dpi_without_desktop_input(
                     std::fs::create_dir_all(&directory).unwrap();
                     std::fs::write(directory.join(format!("schema-{theme:?}.bmp")), bmp).unwrap();
                 }
-                renderer.paint_schema_on(
-                    &target,
-                    &bindings,
-                    Some(1),
-                    Some(1),
-                    Some(1),
-                    true,
-                    "Key is already used. Previous shortcut kept.",
-                )?;
+                renderer.paint_schema_on(&target, &bindings, Some(1), Some(1), Some(1))?;
                 assert_eq!(pixel(39., 155.), &[216, 101, 88], "missing recording state");
-                assert_ne!(
-                    pixel(42., 188.),
-                    bg,
-                    "keyboard recording hint must be visible in the window"
-                );
             }
         }
         Ok(())

@@ -1,6 +1,6 @@
 use super::*;
 use crate::input::{self, Action, Bindings, Shortcut};
-use ::windows::Win32::UI::Controls::*;
+use ::windows::Win32::UI::Controls::WM_MOUSELEAVE;
 
 pub const APPLY: u32 = WM_APP + 2;
 pub const WIDTH: f32 = 344.;
@@ -91,28 +91,20 @@ pub struct Schema {
     pub key_rects: [Rect; 10],
     pub theme: Theme,
     pub focus: Option<usize>,
-    pub keyboard_focus: bool,
     pub listening: Option<usize>,
     pub hover: Option<usize>,
-    pub error: String,
     renderer: render::Renderer,
     scale: f32,
     window_size: (i32, i32),
-    tooltip: HWND,
-    tip_text: Vec<u16>,
-    tip_target: Option<usize>,
     pending: Option<Bindings>,
     // Do not accept keys that were held before recording began.
     blocked: Vec<u16>,
 }
 impl Schema {
     fn refresh_keys(&mut self) {
-        unsafe {
-            set_tooltip_theme(self.tooltip, self.theme);
-        }
         match unsafe { self.renderer.schema_keys(&self.bindings) } {
             Ok(keys) => self.key_rects = keys,
-            Err(error) => self.error = format!("Could not measure shortcuts: {error}"),
+            Err(error) => eprintln!("Could not measure shortcuts: {error}"),
         }
     }
     fn hit(&self, point: Point) -> Option<usize> {
@@ -127,89 +119,6 @@ impl Schema {
     unsafe fn repaint(&self) {
         let _ = InvalidateRect(self.hwnd, None, false);
     }
-    unsafe fn description(&mut self, point: Option<Point>) {
-        let index = if let Some(p) = point {
-            self.hit(p)
-        } else {
-            self.focus
-        };
-        let target = index;
-        let text = if self.keyboard_focus {
-            String::new()
-        } else if let Some(index) = self.listening {
-            if index == 0 {
-                "Press a shortcut · Esc cancels".to_owned()
-            } else {
-                "Press a single key · Esc cancels".to_owned()
-            }
-        } else if let Some(index) = index {
-            match index {
-                RESET => "Reset all shortcuts".into(),
-                CLOSE => "Close".into(),
-                _ => String::new(),
-            }
-        } else {
-            String::new()
-        };
-        let tip_text: Vec<u16> = text.encode_utf16().chain(Some(0)).collect();
-        if self.tip_target == target && self.tip_text == tip_text {
-            return;
-        }
-        self.tip_target = target;
-        let mut info = TTTOOLINFOW {
-            cbSize: tooltip_info_size(),
-            uFlags: TTF_TRACK | TTF_ABSOLUTE,
-            hwnd: self.hwnd,
-            uId: 1,
-            ..Default::default()
-        };
-        SendMessageW(
-            self.tooltip,
-            TTM_TRACKACTIVATE,
-            WPARAM(0),
-            LPARAM(&info as *const _ as isize),
-        );
-        self.tip_text = tip_text;
-        if text.is_empty() {
-            return;
-        }
-        info.lpszText = PWSTR(self.tip_text.as_mut_ptr());
-        SendMessageW(
-            self.tooltip,
-            TTM_UPDATETIPTEXTW,
-            WPARAM(0),
-            LPARAM(&info as *const _ as isize),
-        );
-        let anchor = if let Some(point) = point {
-            point
-        } else {
-            match index.unwrap_or(0) {
-                RESET => Point::new(283., 35.),
-                CLOSE => Point::new(318., 35.),
-                i => {
-                    let r = self.key_rects[i];
-                    Point::new((r.left + r.right) / 2., r.bottom)
-                }
-            }
-        };
-        let mut p = POINT {
-            x: (anchor.x * self.scale) as i32,
-            y: ((anchor.y + 14.) * self.scale) as i32,
-        };
-        let _ = ClientToScreen(self.hwnd, &mut p);
-        SendMessageW(
-            self.tooltip,
-            TTM_TRACKPOSITION,
-            WPARAM(0),
-            LPARAM(((p.y as u32 & 0xffff) << 16 | (p.x as u32 & 0xffff)) as isize),
-        );
-        SendMessageW(
-            self.tooltip,
-            TTM_TRACKACTIVATE,
-            WPARAM(1),
-            LPARAM(&info as *const _ as isize),
-        );
-    }
     unsafe fn cancel(&mut self) {
         self.listening = None;
         self.blocked.clear();
@@ -217,15 +126,12 @@ impl Schema {
     unsafe fn hide(&mut self) {
         self.cancel();
         self.focus = None;
-        self.keyboard_focus = false;
         self.hover = None;
-        self.description(None);
         let _ = ShowWindow(self.hwnd, SW_HIDE);
     }
     unsafe fn request(&mut self, bindings: Bindings) {
         self.cancel();
-        self.error.clear();
-        self.resize_for_error();
+        self.resize();
         if self.bindings == bindings {
             self.repaint();
             return;
@@ -241,15 +147,13 @@ impl Schema {
             RESET if self.bindings != Bindings::default() => self.request(Bindings::default()),
             RESET => {}
             _ => {
-                self.error.clear();
                 self.listening = Some(index);
                 self.blocked = (1..=254)
                     .filter(|&key| GetAsyncKeyState(key as i32) < 0)
                     .collect();
             }
         }
-        self.resize_for_error();
-        self.description(None);
+        self.resize();
         self.repaint();
     }
     unsafe fn key(&mut self, key: u16, repeat: bool) {
@@ -259,7 +163,6 @@ impl Schema {
         if let Some(index) = self.listening {
             if key == 0x1b {
                 self.cancel();
-                self.description(None);
                 self.repaint();
                 return;
             }
@@ -300,10 +203,9 @@ impl Schema {
                 };
                 match result {
                     Ok(()) => self.request(bindings),
-                    Err(error) => self.error = error,
+                    Err(_) => return,
                 }
-                self.resize_for_error();
-                self.description(None);
+                self.resize();
                 self.repaint();
                 return;
             }
@@ -323,11 +225,8 @@ impl Schema {
                     }
                 }
                 self.cancel();
-                self.error.clear();
-                self.resize_for_error();
+                self.resize();
                 self.focus = Some(index);
-                self.keyboard_focus = true;
-                self.description(None);
             }
             0x0d | 0x20 => {
                 if let Some(index) = self.focus {
@@ -339,8 +238,8 @@ impl Schema {
         }
         self.repaint();
     }
-    unsafe fn resize_for_error(&mut self) {
-        let height = HEIGHT + if self.error.is_empty() { 0. } else { 58. };
+    unsafe fn resize(&mut self) {
+        let height = HEIGHT;
         let size = (
             (WIDTH * self.scale).round() as i32,
             (height * self.scale).round() as i32,
@@ -414,11 +313,9 @@ impl Schema {
                 let point = point_in(lparam, self.scale);
                 let next = self.hit(point);
                 if self.hover != next {
-                    self.keyboard_focus = false;
                     self.hover = next;
                     self.repaint();
                 }
-                self.description(Some(point));
                 let mut track = TRACKMOUSEEVENT {
                     cbSize: size_of::<TRACKMOUSEEVENT>() as u32,
                     dwFlags: TME_LEAVE,
@@ -429,18 +326,15 @@ impl Schema {
             }
             WM_MOUSELEAVE => {
                 self.hover = None;
-                self.description(None);
                 self.repaint();
             }
             WM_LBUTTONDOWN => {
-                self.keyboard_focus = false;
                 let _ = SetFocus(self.hwnd);
                 if let Some(index) = self.hit(point_in(lparam, self.scale)) {
                     self.activate(index);
                 } else {
                     self.cancel();
                     self.focus = None;
-                    self.description(None);
                     self.repaint();
                 }
             }
@@ -452,10 +346,8 @@ impl Schema {
             WM_KEYDOWN | WM_SYSKEYDOWN => self.key(wparam.0 as u16, lparam.0 & (1 << 30) != 0),
             WM_KEYUP | WM_SYSKEYUP => self.blocked.retain(|&key| key != wparam.0 as u16),
             WM_KILLFOCUS => {
-                self.keyboard_focus = false;
                 self.cancel();
                 self.focus = None;
-                self.description(None);
                 self.repaint();
             }
             WM_CLOSE => self.hide(),
@@ -475,7 +367,7 @@ impl Schema {
                     self.renderer = renderer;
                 }
                 self.refresh_keys();
-                self.resize_for_error();
+                self.resize();
                 self.repaint();
             }
             _ => return None,
@@ -505,61 +397,6 @@ unsafe fn new_renderer(hwnd: HWND, scale: f32, theme: Theme) -> Result<render::R
         theme,
     )
 }
-fn tooltip_info_size() -> u32 {
-    // The system's unthemed comctl32 accepts the v2 structure, without lpReserved.
-    std::mem::offset_of!(TTTOOLINFOW, lpReserved) as u32
-}
-unsafe fn set_tooltip_theme(tooltip: HWND, theme: Theme) {
-    let (background, foreground) = match theme {
-        Theme::Dark => (0x00262424, 0x00f2f0f0),
-        Theme::Light => (0x00f2f0f0, 0x00241f1f),
-    };
-    SendMessageW(tooltip, TTM_SETTIPBKCOLOR, WPARAM(background), LPARAM(0));
-    SendMessageW(tooltip, TTM_SETTIPTEXTCOLOR, WPARAM(foreground), LPARAM(0));
-}
-unsafe fn create_tooltip(hwnd: HWND, theme: Theme) -> Result<(HWND, Vec<u16>)> {
-    InitCommonControls();
-    let tooltip = CreateWindowExW(
-        WS_EX_TOPMOST | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW,
-        TOOLTIPS_CLASSW,
-        PCWSTR::null(),
-        WS_POPUP | WINDOW_STYLE(TTS_ALWAYSTIP | TTS_NOPREFIX | TTS_NOANIMATE | TTS_NOFADE),
-        0,
-        0,
-        0,
-        0,
-        hwnd,
-        None,
-        GetModuleHandleW(None)?,
-        None,
-    )?;
-    let mut text: Vec<u16> = "Click to rebind".encode_utf16().chain(Some(0)).collect();
-    let tool = TTTOOLINFOW {
-        cbSize: tooltip_info_size(),
-        uFlags: TTF_TRACK | TTF_ABSOLUTE,
-        hwnd,
-        uId: 1,
-        lpszText: PWSTR(text.as_mut_ptr()),
-        ..Default::default()
-    };
-    if SendMessageW(
-        tooltip,
-        TTM_ADDTOOLW,
-        WPARAM(0),
-        LPARAM(&tool as *const _ as isize),
-    )
-    .0 == 0
-    {
-        let _ = DestroyWindow(tooltip);
-        return Err(Error::new(
-            E_FAIL,
-            "Could not register shortcut hover descriptions",
-        ));
-    }
-    set_tooltip_theme(tooltip, theme);
-    Ok((tooltip, text))
-}
-
 pub unsafe fn open(owner: HWND, theme: Theme, bindings: &Bindings) -> Result<()> {
     if WINDOW.with(|w| {
         let mut window = w.borrow_mut();
@@ -567,9 +404,8 @@ pub unsafe fn open(owner: HWND, theme: Theme, bindings: &Bindings) -> Result<()>
             window.bindings = bindings.clone();
             window.theme = theme;
             window.renderer.theme = theme;
-            window.error.clear();
             window.refresh_keys();
-            window.resize_for_error();
+            window.resize();
             let _ = ShowWindow(window.hwnd, SW_SHOWNORMAL);
             let _ = SetForegroundWindow(window.hwnd);
             let _ = SetFocus(window.hwnd);
@@ -623,7 +459,6 @@ pub unsafe fn open(owner: HWND, theme: Theme, bindings: &Bindings) -> Result<()>
         disable_ime(hwnd)?;
         let renderer = new_renderer(hwnd, scale, theme)?;
         let key_rects = renderer.schema_keys(bindings)?;
-        let (tooltip, tip_text) = create_tooltip(hwnd, theme)?;
         Ok(Schema {
             hwnd,
             owner,
@@ -631,16 +466,11 @@ pub unsafe fn open(owner: HWND, theme: Theme, bindings: &Bindings) -> Result<()>
             key_rects,
             theme,
             focus: None,
-            keyboard_focus: false,
             listening: None,
             hover: None,
-            error: String::new(),
             renderer,
             scale,
             window_size: (0, 0),
-            tooltip,
-            tip_text,
-            tip_target: None,
             pending: None,
             blocked: Vec::new(),
         })
@@ -656,7 +486,7 @@ pub unsafe fn open(owner: HWND, theme: Theme, bindings: &Bindings) -> Result<()>
     WINDOW.with(|w| {
         let mut window = w.borrow_mut();
         let window = window.as_mut().unwrap();
-        window.resize_for_error();
+        window.resize();
         let _ = ShowWindow(hwnd, SW_SHOW);
         let _ = SetForegroundWindow(hwnd);
         let _ = SetFocus(hwnd);
@@ -674,16 +504,14 @@ pub unsafe fn hide() {
         }
     });
 }
-pub unsafe fn update(theme: Theme, bindings: &Bindings, error: Option<String>) {
+pub unsafe fn update(theme: Theme, bindings: &Bindings) {
     WINDOW.with(|w| {
         if let Some(w) = w.borrow_mut().as_mut() {
             w.theme = theme;
             w.renderer.theme = theme;
             w.bindings = bindings.clone();
-            w.error = error.unwrap_or_default();
             w.refresh_keys();
-            w.resize_for_error();
-            w.description(None);
+            w.resize();
             w.repaint();
         }
     });
@@ -694,7 +522,6 @@ pub fn take_request() -> Option<Bindings> {
 pub unsafe fn close() {
     WINDOW.with(|w| {
         if let Some(w) = w.borrow_mut().take() {
-            let _ = DestroyWindow(w.tooltip);
             let _ = DestroyWindow(w.hwnd);
         }
     });
@@ -703,41 +530,6 @@ pub unsafe fn close() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn hover_control_registers_a_real_tool_without_showing_a_window() -> Result<()> {
-        unsafe {
-            let owner = CreateWindowExW(
-                WINDOW_EX_STYLE::default(),
-                w!("STATIC"),
-                w!("Tooltip registration test"),
-                WS_POPUP,
-                0,
-                0,
-                1,
-                1,
-                None,
-                None,
-                None,
-                None,
-            )?;
-            let result = create_tooltip(owner, Theme::Dark);
-            let count = result.as_ref().ok().map(|(tooltip, _)| {
-                SendMessageW(*tooltip, TTM_GETTOOLCOUNT, WPARAM(0), LPARAM(0)).0
-            });
-            if let Ok((tooltip, _text)) = &result {
-                assert!(!IsWindowVisible(*tooltip).as_bool());
-                let _ = DestroyWindow(*tooltip);
-            }
-            let _ = DestroyWindow(owner);
-            result?;
-            assert_eq!(
-                count.unwrap(),
-                1,
-                "hover descriptions need a registered native tool"
-            );
-            Ok(())
-        }
-    }
     #[test]
     fn recording_cancels_on_escape_or_focus_loss_and_reset_requests_only_defaults() -> Result<()> {
         unsafe {
@@ -768,15 +560,10 @@ mod tests {
                     bindings: bindings.clone(),
                     theme: Theme::Light,
                     focus: Some(1),
-                    keyboard_focus: false,
                     listening: Some(1),
                     hover: None,
-                    error: String::new(),
                     scale: 1.,
                     window_size: (0, 0),
-                    tooltip: HWND::default(),
-                    tip_text: Vec::new(),
-                    tip_target: None,
                     pending: None,
                     blocked: vec![b'W' as u16],
                 };
@@ -784,6 +571,13 @@ mod tests {
                 window.key(b'E' as u16, true);
                 assert_eq!(window.listening, Some(1));
                 assert!(window.pending.is_none());
+                let original_size = window.window_size;
+                window.key(0x20, false);
+                assert_eq!(window.listening, Some(1));
+                assert_eq!(window.bindings, bindings);
+                assert!(window.pending.is_none());
+                assert_eq!(window.window_size, original_size);
+                assert!(IsWindow(hwnd).as_bool());
                 window.key(0x1b, false);
                 assert_eq!(window.listening, None);
                 assert!(window.blocked.is_empty());
@@ -801,10 +595,8 @@ mod tests {
                 );
                 assert_eq!(window.theme, Theme::Light);
                 window.pending.take();
-                window.error = "Previous invalid key".into();
                 window.listening = Some(1);
                 window.request(bindings.clone());
-                assert!(window.error.is_empty());
                 assert!(window.pending.is_none());
                 assert_eq!(window.listening, None);
                 Ok(())

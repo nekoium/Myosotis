@@ -21,4 +21,12 @@ Reference: docs/design/input-schema/selected-dark.png (688 × 588 pixels at 200%
 - Built both target/release/myosotis.exe and the previously linked target/input-schema/release/myosotis.exe. Restarted the corrected ordinary release using the user's original environment/preferences and opened Input schema for review.
 - This pass does not qualify capture/clipboard output, all global shortcut conflicts, multi-monitor DPI transitions, or full screen-reader navigation. GUI checks were confined to Input schema and its tray options.
 
+## Subsequent removal of messages
+
+The user subsequently requested silent rejection and no descriptive text in Input schema. Removed the native tooltip control and its registration, keyboard description rendering, error text, and variable-height error area. Invalid keys leave recording active and bindings unchanged; failed registration or saves retain the previous bindings. No rejection outline or other error feedback replaces the text. The title, key labels, normal focus outlines, and recording indicator remain.
+
+Formatting, Clippy, and locked tests pass: 28 passed, one optional diagnostic ignored. The removed tooltip registration test accounts for the reduced count. The hidden-window state test now checks silent invalid-key rejection. Release built to `target/input-schema`; no live desktop checks were run for this removal.
+
+Rim candidate: schema-remove-all-messages, n9ea84053c568e30.
+
 Rim candidate: input-schema-visual-fix, n2e2b502e02d1448. Parent: input-schema-native, naa8edcafdce4f5e.

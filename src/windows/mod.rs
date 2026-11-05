@@ -624,7 +624,7 @@ impl App {
             renderer.theme = theme;
         }
         self.repaint();
-        schema::update(self.theme, &self.bindings, None);
+        schema::update(self.theme, &self.bindings);
         if let Err(error) = settings::path().and_then(|path| theme.save(&path)) {
             show_error(&format!(
                 "The theme changed for this session, but could not be saved.\n\n{error}\n\nCheck %LOCALAPPDATA%\\Myosotis\\settings.toml and its folder permissions."
@@ -817,8 +817,10 @@ impl App {
             }
             schema::APPLY => {
                 if let Some(bindings) = schema::take_request() {
-                    let result = self.change_bindings(bindings);
-                    schema::update(self.theme, &self.bindings, result.err());
+                    if let Err(error) = self.change_bindings(bindings) {
+                        eprintln!("Shortcut change rejected: {error}");
+                    }
+                    schema::update(self.theme, &self.bindings);
                 }
             }
             WM_PAINT => self.paint(),
