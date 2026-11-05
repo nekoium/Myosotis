@@ -895,8 +895,8 @@ impl App {
             }
             TRAY => match lparam.0 as u32 {
                 WM_LBUTTONUP => {
-                    if let Err(e) = self.activate() {
-                        show_error(&e.to_string());
+                    if let Err(error) = schema::open(self.hwnd, self.theme, &self.bindings) {
+                        show_error(&format!("Could not open Input schema.\n\n{error}"));
                     }
                 }
                 WM_RBUTTONUP | WM_CONTEXTMENU => self.tray_menu(),

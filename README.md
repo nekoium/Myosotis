@@ -38,13 +38,13 @@ cargo build --locked --release
 .\target\release\myosotis.exe --capture
 ```
 
-Myosotis stays in the notification area after you copy or cancel. Use **Ctrl+Alt+S** to capture again. Click its flower icon to capture, or right-click it for **Input schema**, theme options, **Start at login**, and Quit. If Windows hides the icon, look under the notification area's overflow arrow.
+Myosotis stays in the notification area after you copy or cancel. Use **Ctrl+Alt+S** to capture again. Click its flower icon to open **Input schema**, or right-click it for capture, **Input schema**, theme options, **Start at login**, and Quit. If Windows hides the icon, look under the notification area's overflow arrow.
 
 Launching the executable again opens the resident app. The default capture shortcut is **Ctrl+Alt+S**. You can change it through **Input schema** in the tray menu; Myosotis reports shortcuts that Windows cannot register.
 
 ### Input schema
 
-Right-click the notification-area icon and choose **Input schema** to view or change shortcuts. Click a keycap and press its replacement. You can also use Tab to focus a keycap and Enter or Space to start editing. Escape cancels an edit; closing the window keeps your changes.
+Click the notification-area icon to view or change shortcuts in **Input schema**. You can also right-click the icon and choose **Input schema**. Click a keycap and press its replacement. You can also use Tab to focus a keycap and Enter or Space to start editing. Escape cancels an edit; closing the window keeps your changes.
 
 Capture accepts a key combined with Ctrl, Alt, or Win. The capture overlay uses single keys. Space drawing, Enter completion, and mouse gestures remain fixed; Space, Enter, and Tab cannot be reassigned. The window shows each action's primary shortcut. The restore icon beside Close resets all shortcuts, including Capture, without changing theme or startup preferences. It is disabled when the defaults are active.
 

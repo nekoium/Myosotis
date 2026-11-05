@@ -144,6 +144,8 @@ This direction was selected after comparing Material, light macOS-inspired, and 
 
 ### Input schema
 
+For [issue #13](https://github.com/nekoium/Myosotis/issues/13), left-clicking the notification-area icon opens Input schema instead of starting a capture. It reuses the existing window when already open. Right-click still opens the tray menu; the global shortcut and the menu's Capture entry still start capture.
+
 For [issue #10](https://github.com/nekoium/Myosotis/issues/10), the tray menu's **Input schema** entry opens a single native, draggable window with the selected compact A1 layout. It is not always on top. The active Dark or Light palette applies. Capture has an icon at the left and a right-aligned keycap. The six familiar toolbar icons retain their order, selected Pen, and periwinkle Copy treatment, with editable keycaps underneath. Undo, Redo, and Clear align with the first three tool columns. The window shows primary keyboard shortcuts only, without a gesture guide or persistent action labels.
 
 Clicking a keycap or activating it with the keyboard listens for a replacement. Icon-name and rebinding tooltips are omitted. Escape and focus loss cancel recording, auto-repeat is ignored, and held keys must be released before being recorded. Tab traverses the keycaps, Restore defaults, and Close. Closing hides the window without quitting the tray app. Starting a capture cancels editing and hides the schema first. The custom window supports keyboard navigation and focus outlines; a full UI Automation provider is not implemented.
