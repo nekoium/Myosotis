@@ -4,10 +4,12 @@ mod completion_tests;
 #[cfg(test)]
 mod input_tests;
 mod render;
+mod schema;
 mod startup;
 
 use crate::{
     document::{hit_edge, resize, Document, Point, Rect, Tool},
+    input::{Action, Bindings},
     settings::{self, Theme},
 };
 use ::windows::{
@@ -59,7 +61,29 @@ const QUIT: usize = 2;
 const THEME_DARK: usize = 3;
 const THEME_LIGHT: usize = 4;
 const START_AT_LOGIN: usize = 5;
-const HINT: &str = "Double-click or Ctrl to copy · Z undo · Esc cancel";
+const INPUT_SCHEMA: usize = 6;
+const HOTKEY_ALTERNATE: i32 = HOTKEY + 1;
+struct InputHints {
+    toolbar: [String; 6],
+    workflow: String,
+    selection: String,
+}
+impl InputHints {
+    fn new(bindings: &Bindings) -> Self {
+        Self {
+            toolbar: [
+                format!("Pen · {} · Hold Space to draw", bindings.label(Action::Pen)),
+                format!("Arrow · {} · Drag to point", bindings.label(Action::Arrow)),
+                format!("Rectangle · {} · Drag to outline", bindings.label(Action::Rectangle)),
+                format!("Numbered mark · {} · Click to place", bindings.label(Action::Number)),
+                format!("Copy image and close · {} or Enter", bindings.label(Action::Copy)),
+                format!("Cancel capture · {}", bindings.label(Action::Cancel)),
+            ],
+            workflow: format!("Double-click or {} to copy · {} undo · {} cancel", bindings.label(Action::Copy), bindings.label(Action::Undo), bindings.label(Action::Cancel)),
+            selection: format!("Myosotis · Drag to capture · Right-drag for white canvas · Click for monitor · {} cancel", bindings.label(Action::Cancel)),
+        }
+    }
+}
 thread_local! { static APP: RefCell<Option<App>> = const { RefCell::new(None) }; }
 
 #[derive(Clone, Copy)]
@@ -74,6 +98,9 @@ struct App {
     doc: Document,
     renderer: Option<render::Renderer>,
     theme: Theme,
+    bindings: Bindings,
+    input_hints: InputHints,
+    hotkey_id: i32,
     pixels: Vec<u8>,
     origin: POINT,
     full: Rect,
@@ -96,6 +123,7 @@ impl App {
         if self.visible {
             return Ok(());
         }
+        schema::hide();
         self.previous = GetForegroundWindow();
         self.origin = POINT {
             x: GetSystemMetrics(SM_XVIRTUALSCREEN),
@@ -462,25 +490,32 @@ impl App {
             }
             return;
         }
-        if key != 0x1B {
+        let action = self.bindings.action(key as u16);
+        if action != Some(Action::Cancel) {
             self.flush_click();
             self.click_start = None;
         }
-        match key {
-            0x1B => self.close_overlay(),
-            0x0D | 0x11 if !repeat => self.copy(),
-            0x31..=0x34 if !repeat => {
+        if key == 0x0D && !repeat {
+            self.copy();
+            return;
+        }
+        match action {
+            Some(Action::Cancel) => self.close_overlay(),
+            Some(Action::Copy) if !repeat => self.copy(),
+            Some(action @ (Action::Pen | Action::Arrow | Action::Rectangle | Action::Number))
+                if !repeat =>
+            {
                 self.doc.finish();
-                self.doc.tool = Tool::ALL[key - 0x31];
+                self.doc.tool = Tool::ALL[action as usize];
             }
-            0x5A if !repeat => {
+            Some(Action::Undo) if !repeat => {
                 self.gesture = None;
                 self.space = false;
                 self.doc.undo();
                 let _ = ReleaseCapture();
             }
-            0x59 if !repeat => self.doc.redo(),
-            0x52 if !repeat => {
+            Some(Action::Redo) if !repeat => self.doc.redo(),
+            Some(Action::Clear) if !repeat => {
                 self.gesture = None;
                 self.space = false;
                 self.doc.reset();
@@ -508,7 +543,11 @@ impl App {
                 bar.contains(self.pointer).then(|| {
                     let item = ((self.pointer.x - bar.left) / (render::TOOLBAR_CELL * self.scale))
                         as usize;
-                    render::TOOLBAR_LABELS.get(item).copied().unwrap_or("")
+                    self.input_hints
+                        .toolbar
+                        .get(item)
+                        .map(String::as_str)
+                        .unwrap_or("")
                 })
             });
             let hint = if !self.hint.is_empty() {
@@ -516,9 +555,9 @@ impl App {
             } else if let Some(label) = toolbar_label {
                 label
             } else if self.doc.selection.is_some() {
-                HINT
+                &self.input_hints.workflow
             } else {
-                "Myosotis · Drag to capture · Right-drag for white canvas · Click for monitor · Esc cancel"
+                &self.input_hints.selection
             };
             let result = self.renderer.as_ref().map(|r| {
                 r.paint(
@@ -536,6 +575,46 @@ impl App {
         }
         let _ = EndPaint(self.hwnd, &ps);
     }
+    unsafe fn change_bindings(&mut self, bindings: Bindings) -> std::result::Result<(), String> {
+        let changed = bindings.capture != self.bindings.capture;
+        let next = if self.hotkey_id == HOTKEY {
+            HOTKEY_ALTERNATE
+        } else {
+            HOTKEY
+        };
+        if changed {
+            RegisterHotKey(
+                self.hwnd,
+                next,
+                HOT_KEY_MODIFIERS(bindings.capture.modifiers) | MOD_NOREPEAT,
+                bindings.capture.key as u32,
+            )
+            .map_err(|_| {
+                format!(
+                    "{} is unavailable. Previous shortcut kept.",
+                    bindings.capture.label()
+                )
+            })?;
+        }
+        if let Err(error) = settings::path().and_then(|path| bindings.save(&path)) {
+            if changed {
+                let _ = UnregisterHotKey(self.hwnd, next);
+            }
+            return Err(format!(
+                "Could not save shortcuts. Previous shortcuts kept. {error}"
+            ));
+        }
+        if changed {
+            let _ = UnregisterHotKey(self.hwnd, self.hotkey_id);
+            self.hotkey_id = next;
+        }
+        self.bindings = bindings;
+        self.input_hints = InputHints::new(&self.bindings);
+        update_tray_tip(&mut self.tray, &self.bindings);
+        let _ = Shell_NotifyIconW(NIM_MODIFY, &self.tray);
+        self.repaint();
+        Ok(())
+    }
     unsafe fn change_theme(&mut self, theme: Theme) {
         if self.theme == theme {
             return;
@@ -545,6 +624,7 @@ impl App {
             renderer.theme = theme;
         }
         self.repaint();
+        schema::update(self.theme, &self.bindings, None);
         if let Err(error) = settings::path().and_then(|path| theme.save(&path)) {
             show_error(&format!(
                 "The theme changed for this session, but could not be saved.\n\n{error}\n\nCheck %LOCALAPPDATA%\\Myosotis\\settings.toml and its folder permissions."
@@ -553,12 +633,12 @@ impl App {
     }
     unsafe fn tray_menu(&mut self) {
         if let Ok(menu) = CreatePopupMenu() {
-            let _ = AppendMenuW(
-                menu,
-                MF_STRING,
-                CAPTURE,
-                w!("Capture / blank canvas    Ctrl+Alt+S"),
-            );
+            let capture_label = HSTRING::from(format!(
+                "Capture / blank canvas    {}",
+                self.bindings.capture.label()
+            ));
+            let _ = AppendMenuW(menu, MF_STRING, CAPTURE, &capture_label);
+            let _ = AppendMenuW(menu, MF_STRING, INPUT_SCHEMA, w!("Input schema"));
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
             if let Ok(themes) = CreatePopupMenu() {
                 let _ = AppendMenuW(themes, MF_STRING, THEME_DARK, w!("Dark"));
@@ -613,6 +693,11 @@ impl App {
                 CAPTURE => {
                     if let Err(e) = self.activate() {
                         show_error(&e.to_string());
+                    }
+                }
+                INPUT_SCHEMA => {
+                    if let Err(error) = schema::open(self.hwnd, self.theme, &self.bindings) {
+                        show_error(&format!("Could not open Input schema.\n\n{error}"));
                     }
                 }
                 THEME_DARK => self.change_theme(Theme::Dark),
@@ -722,9 +807,18 @@ impl App {
     }
     unsafe fn message(&mut self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option<LRESULT> {
         match msg {
-            WM_HOTKEY if wparam.0 == HOTKEY as usize => {
+            WM_HOTKEY if wparam.0 == self.hotkey_id as usize || wparam.0 == HOTKEY as usize => {
+                if schema::recording() {
+                    return Some(LRESULT(0));
+                }
                 if let Err(e) = self.activate() {
                     show_error(&format!("Capture failed.\n\n{e}"));
+                }
+            }
+            schema::APPLY => {
+                if let Some(bindings) = schema::take_request() {
+                    let result = self.change_bindings(bindings);
+                    schema::update(self.theme, &self.bindings, result.err());
                 }
             }
             WM_PAINT => self.paint(),
@@ -772,7 +866,9 @@ impl App {
                 self.set_cursor();
                 return Some(LRESULT(1));
             }
-            WM_KEYDOWN if self.visible => self.key(wparam.0, lparam.0 & (1 << 30) != 0),
+            WM_KEYDOWN | WM_SYSKEYDOWN if self.visible => {
+                self.key(wparam.0, lparam.0 & (1 << 30) != 0)
+            }
             WM_KEYUP if wparam.0 == 0x20 && self.space => {
                 self.up(false, Input::Space);
             }
@@ -824,6 +920,17 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             .and_then(|mut app| app.as_mut().and_then(|a| a.message(msg, wparam, lparam)))
     });
     result.unwrap_or_else(|| DefWindowProcW(hwnd, msg, wparam, lparam))
+}
+
+fn update_tray_tip(tray: &mut NOTIFYICONDATAW, bindings: &Bindings) {
+    tray.szTip.fill(0);
+    let tip = format!(
+        "Myosotis · {} · Right-click for options",
+        bindings.capture.label()
+    );
+    for (slot, unit) in tray.szTip.iter_mut().take(127).zip(tip.encode_utf16()) {
+        *slot = unit;
+    }
 }
 
 pub fn show_error(message: &str) {
@@ -886,14 +993,38 @@ pub fn run() -> Result<()> {
             let _ = DestroyWindow(hwnd);
             return Err(error);
         }
-        if let Err(e) = RegisterHotKey(
+        let mut bindings = settings::path()
+            .and_then(|path| Bindings::load(&path))
+            .unwrap_or_else(|error| {
+                eprintln!("Could not load input settings; using defaults: {error}");
+                Bindings::default()
+            });
+        if RegisterHotKey(
             hwnd,
             HOTKEY,
-            MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
-            b'S' as u32,
-        ) {
-            let _ = DestroyWindow(hwnd);
-            return Err(Error::new(e.code(), "Ctrl+Alt+S is already in use. Close the other app using that shortcut and start Myosotis again."));
+            HOT_KEY_MODIFIERS(bindings.capture.modifiers) | MOD_NOREPEAT,
+            bindings.capture.key as u32,
+        )
+        .is_err()
+        {
+            let saved = bindings.capture;
+            bindings.capture = crate::input::Shortcut::default();
+            if saved == bindings.capture
+                || RegisterHotKey(
+                    hwnd,
+                    HOTKEY,
+                    MOD_CONTROL | MOD_ALT | MOD_NOREPEAT,
+                    b'S' as u32,
+                )
+                .is_err()
+            {
+                let _ = DestroyWindow(hwnd);
+                return Err(Error::new(E_FAIL, "The capture shortcut is already in use. Close the other app using it and start Myosotis again."));
+            }
+            show_error(&format!(
+                "{} is unavailable. Using Ctrl + Alt + S for this session.",
+                saved.label()
+            ));
         }
         let mut tray = NOTIFYICONDATAW {
             cbSize: size_of::<NOTIFYICONDATAW>() as u32,
@@ -904,10 +1035,7 @@ pub fn run() -> Result<()> {
             hIcon: wc.hIcon,
             ..Default::default()
         };
-        let tip: Vec<u16> = "Myosotis · Ctrl+Alt+S · Right-click for options"
-            .encode_utf16()
-            .collect();
-        tray.szTip[..tip.len()].copy_from_slice(&tip);
+        update_tray_tip(&mut tray, &bindings);
         if !Shell_NotifyIconW(NIM_ADD, &tray).as_bool() {
             let _ = UnregisterHotKey(hwnd, HOTKEY);
             let _ = DestroyWindow(hwnd);
@@ -926,6 +1054,9 @@ pub fn run() -> Result<()> {
                 doc: Document::default(),
                 renderer: None,
                 theme,
+                input_hints: InputHints::new(&bindings),
+                bindings,
+                hotkey_id: HOTKEY,
                 pixels: vec![],
                 origin: POINT::default(),
                 full: Rect::default(),
@@ -958,8 +1089,9 @@ pub fn run() -> Result<()> {
         }
         APP.with(|a| {
             if let Some(app) = a.borrow_mut().take() {
+                schema::close();
                 let _ = Shell_NotifyIconW(NIM_DELETE, &app.tray);
-                let _ = UnregisterHotKey(app.hwnd, HOTKEY);
+                let _ = UnregisterHotKey(app.hwnd, app.hotkey_id);
             }
         });
         CoUninitialize();

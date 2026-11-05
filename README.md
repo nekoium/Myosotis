@@ -38,15 +38,23 @@ cargo build --locked --release
 .\target\release\myosotis.exe --capture
 ```
 
-Myosotis stays in the notification area after you copy or cancel. Use **Ctrl+Alt+S** to capture again. Click its flower icon to capture, or right-click it for theme options, **Start at login**, and Quit. If Windows hides the icon, look under the notification area's overflow arrow.
+Myosotis stays in the notification area after you copy or cancel. Use **Ctrl+Alt+S** to capture again. Click its flower icon to capture, or right-click it for **Input schema**, theme options, **Start at login**, and Quit. If Windows hides the icon, look under the notification area's overflow arrow.
 
-Launching the executable again opens the resident app. The shortcut is fixed for this MVP; if another app owns Ctrl+Alt+S, Myosotis reports the conflict.
+Launching the executable again opens the resident app. The default capture shortcut is **Ctrl+Alt+S**. You can change it through **Input schema** in the tray menu; Myosotis reports shortcuts that Windows cannot register.
+
+### Input schema
+
+Right-click the notification-area icon and choose **Input schema** to view or change shortcuts. Click a keycap and press its replacement. You can also use Tab to focus a keycap and Enter or Space to start editing. Escape cancels an edit; closing the window keeps your changes.
+
+Capture accepts a key combined with Ctrl, Alt, or Win. The capture overlay uses single keys. Space drawing, Enter completion, and mouse gestures remain fixed; Space, Enter, and Tab cannot be reassigned. The window shows each action's primary shortcut. The restore icon beside Close resets all shortcuts, including Capture, without changing theme or startup preferences. It is disabled when the defaults are active.
+
+Shortcuts save immediately to `%LOCALAPPDATA%\Myosotis\settings.toml`. Conflicts, unsupported keys, and failed saves leave the previous shortcuts active. If a saved global shortcut is unavailable at startup, Myosotis tries Ctrl+Alt+S and reports the fallback. If neither can be registered, it reports the conflict and exits. The controls below show defaults.
 
 ### Appearance and settings
 
 Right-click the notification-area icon, open **Theme**, and choose **Dark** or **Light**. A radio mark shows the current choice. Dark is the default; changes apply immediately, including during a capture. The theme changes the toolbar and guidance panels. Screenshots, white canvases, and copied annotations keep their original colors.
 
-Myosotis saves your choice in `%LOCALAPPDATA%\Myosotis\settings.toml` when you change the theme. If saving fails, the theme still applies for the current session and Myosotis reports the problem. Missing or invalid settings use Dark at startup.
+Myosotis saves theme and shortcut preferences in `%LOCALAPPDATA%\Myosotis\settings.toml` when you change them. If saving fails, the theme still applies for the current session and Myosotis reports the problem. Missing or invalid settings use Dark at startup.
 
 To reset preferences, quit Myosotis and delete `%LOCALAPPDATA%\Myosotis`. This folder remains if you remove the portable executable; you can delete it yourself. Theme preferences do not use the registry.
 

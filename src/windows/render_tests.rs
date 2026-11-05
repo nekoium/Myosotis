@@ -127,6 +127,97 @@ fn offscreen_cache_preserves_history_and_discards_abandoned_ink() -> Result<()> 
 }
 
 #[test]
+fn schema_renders_both_themes_and_recording_at_common_dpi_without_desktop_input() -> Result<()> {
+    unsafe {
+        let (_window, mut renderer) = renderer()?;
+        let factory = renderer.factory.clone();
+        for scale in [1., 1.25, 1.5, 2.] {
+            renderer.scale = scale;
+            let width = (super::super::schema::WIDTH * scale) as i32;
+            let height = ((super::super::schema::HEIGHT + 58.) * scale) as i32;
+            let surface = super::super::capture::Surface::new(width, height)?;
+            let dc = factory.CreateDCRenderTarget(&properties())?;
+            dc.BindDC(
+                surface.dc,
+                &RECT {
+                    left: 0,
+                    top: 0,
+                    right: width,
+                    bottom: height,
+                },
+            )?;
+            let target: ID2D1RenderTarget = dc.cast()?;
+            for theme in [Theme::Dark, Theme::Light] {
+                renderer.theme = theme;
+                let bindings = crate::input::Bindings::default();
+                let keys = renderer.schema_keys(&bindings)?;
+                assert!(
+                    (keys[0].width() - 77.).abs() < 2.,
+                    "Capture keycap must fit the reference's measured text width"
+                );
+                assert!(
+                    (keys[5].width() - 32.).abs() < 2.,
+                    "Ctrl keycap must not use character-count padding"
+                );
+                assert_eq!(keys[7].top, 248.);
+                assert_eq!(super::super::schema::HEIGHT - keys[7].bottom, 21.);
+                renderer.paint_schema_on(&target, &bindings, None, None, None, false, "")?;
+                let pixel = |x: f32, y: f32| {
+                    let index =
+                        (((y * scale) as usize) * width as usize + (x * scale) as usize) * 4;
+                    &surface.pixels()[index..index + 3]
+                };
+                assert_eq!(
+                    pixel(239., 110.),
+                    &[216, 101, 88],
+                    "missing blue Copy control"
+                );
+                let bg = pixel(10., 100.);
+                assert!(if theme == Theme::Dark {
+                    bg[0] < 50
+                } else {
+                    bg[0] > 230
+                });
+                // Optional memory-only review artifact, never a desktop screenshot.
+                if scale == 2. && std::env::var_os("MYOSOTIS_SCHEMA_PREVIEW").is_some() {
+                    let cropped_height = (super::super::schema::HEIGHT * scale) as i32;
+                    let pixels = &surface.pixels()[..(width * cropped_height * 4) as usize];
+                    let mut bmp = vec![0u8; 54];
+                    bmp[..2].copy_from_slice(b"BM");
+                    bmp[2..6].copy_from_slice(&((54 + pixels.len()) as u32).to_le_bytes());
+                    bmp[10..14].copy_from_slice(&54u32.to_le_bytes());
+                    bmp[14..18].copy_from_slice(&40u32.to_le_bytes());
+                    bmp[18..22].copy_from_slice(&width.to_le_bytes());
+                    bmp[22..26].copy_from_slice(&(-cropped_height).to_le_bytes());
+                    bmp[26..28].copy_from_slice(&1u16.to_le_bytes());
+                    bmp[28..30].copy_from_slice(&32u16.to_le_bytes());
+                    bmp.extend_from_slice(pixels);
+                    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".tmp");
+                    std::fs::create_dir_all(&directory).unwrap();
+                    std::fs::write(directory.join(format!("schema-{theme:?}.bmp")), bmp).unwrap();
+                }
+                renderer.paint_schema_on(
+                    &target,
+                    &bindings,
+                    Some(1),
+                    Some(1),
+                    Some(1),
+                    true,
+                    "Key is already used. Previous shortcut kept.",
+                )?;
+                assert_eq!(pixel(39., 155.), &[216, 101, 88], "missing recording state");
+                assert_ne!(
+                    pixel(42., 188.),
+                    bg,
+                    "keyboard recording hint must be visible in the window"
+                );
+            }
+        }
+        Ok(())
+    }
+}
+
+#[test]
 #[ignore = "optional cursor-free stress diagnostic; run in release mode with --ignored --nocapture"]
 fn offscreen_stroke_stress() -> Result<()> {
     unsafe {

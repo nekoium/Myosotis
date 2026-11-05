@@ -1,5 +1,24 @@
 # Contributing
 
+## Ideas and product decisions
+
+GitHub Issues are the primary record for unresolved product ideas, problems, and proposed improvements. [DESIGN.md](DESIGN.md) records agreed product principles and interaction decisions.
+
+Before planning feature or UX work, review [open issues](https://github.com/nekoium/Myosotis/issues) and search existing issues for related discussions. Add evidence or candidate approaches to an existing issue when the problem and desired outcome match. Create a separate issue when the problem can be resolved independently, and link related issues.
+
+Title issues around a specific user problem or desired outcome. Describe:
+
+- **Problem:** Current behavior, the affected workflow, and why it matters. Distinguish observations from assumptions.
+- **Desired outcome:** What users should be able to accomplish or understand, without prescribing a control or implementation.
+- **Scope and constraints:** What the issue covers, its boundaries, and relevant requirements, including responsiveness.
+- **Possible approaches:** Candidate solutions and tradeoffs. These remain proposals until a decision is recorded.
+- **Open questions:** Evidence or decisions needed before implementation.
+- **Decision:** Initially pending. Once an approach is selected, summarize the rationale and link supporting discussion and implementation work.
+
+Use a tracking issue when several related problems need a shared overview. Link each child issue and keep the tracker's checklist current. Split implementation tasks only when they are useful to deliver an agreed approach; link them to the problem issue.
+
+During planning, start from the relevant tracking issue and its linked discussions. The current [experience refinement tracker](https://github.com/nekoium/Myosotis/issues/5) covers completion with the left hand on the keyboard and right hand on the mouse, interface clarity, and annotation aesthetics. Record decisions in the issue body so readers do not need to reconstruct them from comments. When an agreed interaction changes, update DESIGN.md and link the implementation to its issue. Close a problem issue when its desired outcome is met, or record why it will not be pursued.
+
 ## Build
 
 Use Rust's `x86_64-pc-windows-msvc` toolchain with the Visual Studio C++ build tools and a Windows SDK. The resource compiler embeds the icon, version information, and manifest. The repository's Cargo configuration statically links the C runtime.

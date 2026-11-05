@@ -14,6 +14,9 @@ fn app() -> App {
         doc: Document::default(),
         renderer: None,
         theme: Theme::Dark,
+        bindings: Bindings::default(),
+        input_hints: InputHints::new(&Bindings::default()),
+        hotkey_id: HOTKEY,
         pixels: vec![],
         origin: POINT::default(),
         full: Rect::default(),
@@ -31,6 +34,29 @@ fn app() -> App {
         tray: NOTIFYICONDATAW::default(),
         taskbar_created: 0,
     }
+}
+
+#[test]
+fn configured_tool_keys_and_guidance_use_the_same_bindings() {
+    let mut app = app();
+    app.bindings.set(Action::Arrow, b'W' as u16).unwrap();
+    app.bindings.set(Action::Cancel, b'C' as u16).unwrap();
+    app.input_hints = InputHints::new(&app.bindings);
+    unsafe {
+        app.key(b'W' as usize, false);
+        assert_eq!(app.doc.tool, Tool::Arrow);
+        app.key(0x31, false);
+        assert_eq!(app.doc.tool, Tool::Pen);
+        app.key(0x32, false);
+        assert_eq!(
+            app.doc.tool,
+            Tool::Pen,
+            "old binding must no longer select Arrow"
+        );
+    }
+    assert!(app.input_hints.toolbar[1].contains("W"));
+    assert!(app.input_hints.selection.ends_with("C cancel"));
+    assert!(app.input_hints.workflow.ends_with("C cancel"));
 }
 
 #[test]

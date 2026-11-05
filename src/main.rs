@@ -1,6 +1,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod document;
 #[cfg(any(windows, test))]
+mod input;
+#[cfg(any(windows, test))]
 mod settings;
 mod stroke;
 #[cfg(windows)]

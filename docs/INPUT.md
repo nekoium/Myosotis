@@ -24,6 +24,10 @@ Space uses the same selection, toolbar, drawing, and resizing path as left-click
 - After selection, right-click toggles white and captured-screenshot backgrounds, preserving annotations, selection, and tool. This is not an alpha-transparency mode.
 - R clears annotations while preserving selection, background, and tool. Z undoes a reset as one action; Y redoes it. Numbered marks restart at 1 after reset.
 
+## Shortcut preferences
+
+The tray menu's **Input schema** window shows and edits Capture, tool selection, Copy, Cancel, Undo, Redo, and Clear. The bindings above are defaults; configured keys replace their primary shortcuts. Capture supports a modifier chord; overlay bindings are single keys. Space drawing, Enter completion, and mouse/Space completion gestures remain fixed. The icon-only Restore defaults control resets all shortcut preferences without changing theme or startup. See DESIGN.md for editing, persistence, registration rollback, and validation limits.
+
 ## Validation
 
 Unit tests cover recognition bounds, source separation, temporary-mark rollback, numbering, and reset history. `tools/Smoke-Test.ps1` checks native selection/completion, outside and border clicks, toolbar exclusions, Space input, clipboard pixels and failure recovery, background toggling, reset, and existing capture behavior. It takes focus and pointer control and replaces clipboard content; run it only in an available interactive desktop after quitting a resident Myosotis.

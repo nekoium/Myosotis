@@ -25,21 +25,25 @@ impl Theme {
                 Self::Light => "light".into(),
             }),
         );
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        // Replace only after a complete write, preserving the previous settings on failure.
-        let temporary = path.with_extension("toml.tmp");
-        let result =
-            fs::write(&temporary, table.to_string()).and_then(|()| fs::rename(&temporary, path));
-        if result.is_err() {
-            let _ = fs::remove_file(&temporary);
-        }
-        result
+        save_table(path, &table)
     }
 }
 
-fn read_table(path: &Path) -> io::Result<toml::Table> {
+pub(crate) fn save_table(path: &Path, table: &toml::Table) -> io::Result<()> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    // Replace only after a complete write, preserving the previous settings on failure.
+    let temporary = path.with_extension("toml.tmp");
+    let result =
+        fs::write(&temporary, table.to_string()).and_then(|()| fs::rename(&temporary, path));
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+pub(crate) fn read_table(path: &Path) -> io::Result<toml::Table> {
     match fs::read_to_string(path) {
         Ok(text) => text
             .parse()

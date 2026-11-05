@@ -116,14 +116,6 @@ struct InkCache {
 
 pub const TOOLBAR_CELL: f32 = 40.;
 pub const TOOLBAR_HEIGHT: f32 = 44.;
-pub const TOOLBAR_LABELS: [&str; 6] = [
-    "Pen · 1 · Hold Space to draw",
-    "Arrow · 2 · Drag to point",
-    "Rectangle · 3 · Drag to outline",
-    "Numbered mark · 4 · Click to place",
-    "Copy image and close · Ctrl or Enter",
-    "Cancel capture · Esc",
-];
 
 fn color(r: f32, g: f32, b: f32, a: f32) -> D2D1_COLOR_F {
     D2D1_COLOR_F { r, g, b, a }
@@ -522,8 +514,9 @@ impl Renderer {
         index: usize,
         cell: Rect,
         brush: &ID2D1SolidColorBrush,
-    ) {
-        let size = 20. * self.scale;
+        size: f32,
+    ) -> Result<()> {
+        let size = size * self.scale;
         let x = (cell.left + cell.right - size) / 2.;
         let y = (cell.top + cell.bottom - size) / 2.;
         let p = |a: f32, b: f32| D2D_POINT_2F {
@@ -597,8 +590,467 @@ impl Renderer {
                 line(6., 6., 18., 18.);
                 line(6., 18., 18., 6.);
             }
+            6 | 7 => {
+                let flip = |a: f32| if index == 7 { 24. - a } else { a };
+                line(flip(8.), 3., flip(3.), 8.);
+                line(flip(3.), 8., flip(8.), 13.);
+                let path = self.factory.CreatePathGeometry()?;
+                let sink = path.Open()?;
+                sink.BeginFigure(p(flip(3.), 8.), D2D1_FIGURE_BEGIN_HOLLOW);
+                sink.AddLine(p(flip(14.), 8.));
+                sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                    point1: p(flip(17.314), 8.),
+                    point2: p(flip(20.), 10.686),
+                    point3: p(flip(20.), 14.),
+                });
+                sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                    point1: p(flip(20.), 17.314),
+                    point2: p(flip(17.314), 20.),
+                    point3: p(flip(14.), 20.),
+                });
+                sink.EndFigure(D2D1_FIGURE_END_OPEN);
+                sink.Close()?;
+                target.DrawGeometry(&path, brush, 1.8 * self.scale, Some(&self.rounded_stroke));
+            }
+            8 => {
+                let path = self.factory.CreatePathGeometry()?;
+                let sink = path.Open()?;
+                sink.BeginFigure(p(19., 8.), D2D1_FIGURE_BEGIN_HOLLOW);
+                sink.AddArc(&D2D1_ARC_SEGMENT {
+                    point: p(20., 15.),
+                    size: D2D_SIZE_F {
+                        width: 8. * size / 24.,
+                        height: 8. * size / 24.,
+                    },
+                    rotationAngle: 0.,
+                    sweepDirection: D2D1_SWEEP_DIRECTION_COUNTER_CLOCKWISE,
+                    arcSize: D2D1_ARC_SIZE_LARGE,
+                });
+                sink.EndFigure(D2D1_FIGURE_END_OPEN);
+                sink.Close()?;
+                target.DrawGeometry(&path, brush, 1.8 * self.scale, Some(&self.rounded_stroke));
+                line(19., 3., 19., 8.);
+                line(19., 8., 14., 8.);
+            }
+            10 => {
+                let path = self.factory.CreatePathGeometry()?;
+                let sink = path.Open()?;
+                sink.BeginFigure(p(3., 9.), D2D1_FIGURE_BEGIN_HOLLOW);
+                sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                    point1: p(7., -1.),
+                    point2: p(21., 2.),
+                    point3: p(21., 12.),
+                });
+                sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                    point1: p(21., 24.),
+                    point2: p(4., 24.),
+                    point3: p(4., 14.),
+                });
+                sink.EndFigure(D2D1_FIGURE_END_OPEN);
+                sink.Close()?;
+                target.DrawGeometry(&path, brush, 1.8 * self.scale, Some(&self.rounded_stroke));
+                line(3., 3., 3., 9.);
+                line(3., 9., 9., 9.);
+                line(12., 8., 12., 13.);
+                line(12., 13., 15., 15.);
+            }
+            9 => {
+                for (a, b, c, d) in [
+                    (4., 4., 7., 4.),
+                    (11., 4., 14., 4.),
+                    (20., 10., 20., 13.),
+                    (20., 17., 20., 20.),
+                    (17., 20., 20., 20.),
+                    (10., 20., 13., 20.),
+                    (4., 4., 4., 7.),
+                    (4., 11., 4., 14.),
+                ] {
+                    line(a, b, c, d);
+                }
+                for (a, b) in [(18., 2.), (2., 18.)] {
+                    let start = p(a, b);
+                    let end = p(a + 4., b + 4.);
+                    target.DrawRectangle(
+                        &D2D_RECT_F {
+                            left: start.x,
+                            top: start.y,
+                            right: end.x,
+                            bottom: end.y,
+                        },
+                        brush,
+                        1.4 * self.scale,
+                        None,
+                    );
+                }
+            }
             _ => {}
         }
+        Ok(())
+    }
+    pub unsafe fn schema_keys(&self, bindings: &crate::input::Bindings) -> Result<[Rect; 10]> {
+        let format = self.write.CreateTextFormat(
+            w!("Segoe UI"),
+            None,
+            DWRITE_FONT_WEIGHT_NORMAL,
+            DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL,
+            11. * self.scale,
+            w!("en-us"),
+        )?;
+        let mut keys = [Rect::default(); 10];
+        for (index, rect) in keys.iter_mut().enumerate() {
+            let text: Vec<u16> = super::schema::label(bindings, index)
+                .encode_utf16()
+                .collect();
+            let layout = self.write.CreateTextLayout(
+                &text,
+                &format,
+                1000. * self.scale,
+                40. * self.scale,
+            )?;
+            let mut metrics = DWRITE_TEXT_METRICS::default();
+            layout.GetMetrics(&mut metrics)?;
+            *rect = super::schema::key_rect(
+                index,
+                metrics.widthIncludingTrailingWhitespace / self.scale,
+            );
+        }
+        Ok(keys)
+    }
+    pub unsafe fn paint_schema(&self, window: &super::schema::Schema) -> Result<()> {
+        self.paint_schema_on(
+            &self.target.cast()?,
+            &window.bindings,
+            window.focus,
+            window.listening,
+            window.hover,
+            window.keyboard_focus,
+            &window.error,
+        )
+    }
+    #[allow(clippy::too_many_arguments)]
+    unsafe fn paint_schema_on(
+        &self,
+        target: &ID2D1RenderTarget,
+        bindings: &crate::input::Bindings,
+        focus: Option<usize>,
+        listening: Option<usize>,
+        hover: Option<usize>,
+        keyboard_focus: bool,
+        error: &str,
+    ) -> Result<()> {
+        use super::schema::{self, HEIGHT, WIDTH};
+        let (surface, foreground, key, selected, muted) = match self.theme {
+            Theme::Dark => (
+                color(0.14, 0.14, 0.15, 1.),
+                color(0.94, 0.94, 0.95, 1.),
+                color(0.22, 0.22, 0.24, 1.),
+                color(0.32, 0.32, 0.35, 1.),
+                color(0.65, 0.65, 0.69, 1.),
+            ),
+            Theme::Light => (
+                color(0.94, 0.94, 0.95, 1.),
+                color(0.12, 0.12, 0.14, 1.),
+                color(0.86, 0.86, 0.88, 1.),
+                color(0.76, 0.76, 0.79, 1.),
+                color(0.40, 0.40, 0.44, 1.),
+            ),
+        };
+        let fg = target.CreateSolidColorBrush(&foreground, None)?;
+        let muted = target.CreateSolidColorBrush(&muted, None)?;
+        let key_brush = target.CreateSolidColorBrush(&key, None)?;
+        let selected_brush = target.CreateSolidColorBrush(&selected, None)?;
+        let accent = target.CreateSolidColorBrush(&INTERFACE_ACCENT, None)?;
+        let white = target.CreateSolidColorBrush(&color(1., 1., 1., 1.), None)?;
+        let scaled = |r: Rect| {
+            rect(Rect {
+                left: r.left * self.scale,
+                top: r.top * self.scale,
+                right: r.right * self.scale,
+                bottom: r.bottom * self.scale,
+            })
+        };
+        let fill = |r: Rect, brush: &ID2D1SolidColorBrush, radius: f32| {
+            target.FillRoundedRectangle(
+                &D2D1_ROUNDED_RECT {
+                    rect: scaled(r),
+                    radiusX: radius * self.scale,
+                    radiusY: radius * self.scale,
+                },
+                brush,
+            )
+        };
+        let outline = |r: Rect| {
+            target.DrawRoundedRectangle(
+                &D2D1_ROUNDED_RECT {
+                    rect: scaled(r),
+                    radiusX: 4. * self.scale,
+                    radiusY: 4. * self.scale,
+                },
+                &accent,
+                self.scale,
+                None,
+            )
+        };
+        let text =
+            |value: &str, r: Rect, brush: &ID2D1SolidColorBrush, center: bool| -> Result<()> {
+                let title = !center && r.top < 40.;
+                let font_size = if title {
+                    12.
+                } else if center && r.width() < 60. && value.chars().count() > 7 {
+                    9.
+                } else {
+                    11.
+                };
+                let value: Vec<u16> = value.encode_utf16().collect();
+                let format = self.write.CreateTextFormat(
+                    w!("Segoe UI"),
+                    None,
+                    if title {
+                        DWRITE_FONT_WEIGHT_SEMI_BOLD
+                    } else {
+                        DWRITE_FONT_WEIGHT_NORMAL
+                    },
+                    DWRITE_FONT_STYLE_NORMAL,
+                    DWRITE_FONT_STRETCH_NORMAL,
+                    font_size * self.scale,
+                    w!("en-us"),
+                )?;
+                format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+                if center {
+                    format.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
+                }
+                target.DrawText(
+                    &value,
+                    &format,
+                    &scaled(r),
+                    brush,
+                    D2D1_DRAW_TEXT_OPTIONS_CLIP,
+                    DWRITE_MEASURING_MODE_NATURAL,
+                );
+                Ok(())
+            };
+        let keys = self.schema_keys(bindings)?;
+        target.BeginDraw();
+        target.Clear(Some(&surface));
+        text(
+            "Input schema",
+            Rect {
+                left: 39.,
+                top: 6.,
+                right: 200.,
+                bottom: 36.,
+            },
+            &fg,
+            false,
+        )?;
+        // Reproduce the existing assets/myosotis.svg mark without another image resource.
+        for (degrees, rgb) in [
+            (0., (100., 141., 240.)),
+            (72., (126., 163., 248.)),
+            (144., (107., 149., 242.)),
+            (216., (134., 170., 247.)),
+            (288., (115., 156., 244.)),
+        ] {
+            let angle = (degrees as f32).to_radians();
+            let p = |x: f32, y: f32| {
+                point(Point::new(
+                    (22. + (x * angle.cos() - y * angle.sin()) * 1.16 * 14. / 256.) * self.scale,
+                    (21. + (x * angle.sin() + y * angle.cos()) * 1.16 * 14. / 256.) * self.scale,
+                ))
+            };
+            let petal = self.factory.CreatePathGeometry()?;
+            let sink = petal.Open()?;
+            sink.BeginFigure(p(-13., -4.), D2D1_FIGURE_BEGIN_FILLED);
+            for (a, b, c, d, e, f) in [
+                (-48., -28., -51., -62., -34., -87.),
+                (-13., -115., 35., -103., 41., -76.),
+                (49., -48., 28., -12., -13., -4.),
+            ] {
+                sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                    point1: p(a, b),
+                    point2: p(c, d),
+                    point3: p(e, f),
+                });
+            }
+            sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+            sink.Close()?;
+            let brush = target.CreateSolidColorBrush(
+                &color(rgb.0 / 255., rgb.1 / 255., rgb.2 / 255., 1.),
+                None,
+            )?;
+            target.FillGeometry(&petal, &brush, None);
+        }
+        let center =
+            target.CreateSolidColorBrush(&color(245. / 255., 200. / 255., 92. / 255., 1.), None)?;
+        target.FillEllipse(
+            &D2D1_ELLIPSE {
+                point: point(Point::new(22. * self.scale, 21. * self.scale)),
+                radiusX: 23. * 1.16 * 14. / 256. * self.scale,
+                radiusY: 23. * 1.16 * 14. / 256. * self.scale,
+            },
+            &center,
+        );
+        for (index, r) in [(10, schema::reset_rect()), (11, schema::close_rect())] {
+            let enabled = index == 11 || bindings != &crate::input::Bindings::default();
+            if enabled && hover == Some(index) {
+                fill(r, &key_brush, 4.);
+            }
+            if enabled && focus == Some(index) {
+                outline(r);
+            }
+            let r = Rect {
+                left: r.left * self.scale,
+                top: r.top * self.scale,
+                right: r.right * self.scale,
+                bottom: r.bottom * self.scale,
+            };
+            self.icon(
+                target,
+                if index == 10 { 10 } else { 5 },
+                r,
+                if enabled && (index != 11 || hover == Some(index)) {
+                    &fg
+                } else {
+                    &muted
+                },
+                14.,
+            )?;
+        }
+        for (index, &key_rect) in keys.iter().enumerate() {
+            let r = schema::icon_rect(index);
+            if index == 1 {
+                fill(r, &selected_brush, 6.);
+            }
+            if index == 5 {
+                fill(r, &accent, 6.);
+            }
+            let r = Rect {
+                left: r.left * self.scale,
+                top: r.top * self.scale,
+                right: r.right * self.scale,
+                bottom: r.bottom * self.scale,
+            };
+            self.icon(
+                target,
+                if index == 0 { 9 } else { index - 1 },
+                r,
+                if index == 5 { &white } else { &fg },
+                20.,
+            )?;
+            let value = if listening == Some(index) {
+                "…".into()
+            } else if index == 0 {
+                bindings.capture.label()
+            } else {
+                bindings.label(crate::input::Action::ALL[index - 1])
+            };
+            let r = key_rect;
+            fill(
+                r,
+                if listening == Some(index) {
+                    &accent
+                } else if hover == Some(index) {
+                    &selected_brush
+                } else {
+                    &key_brush
+                },
+                4.,
+            );
+            if focus == Some(index) {
+                outline(Rect {
+                    left: r.left - 2.,
+                    top: r.top - 2.,
+                    right: r.right + 2.,
+                    bottom: r.bottom + 2.,
+                });
+            }
+            text(
+                &value,
+                r,
+                if listening == Some(index) {
+                    &white
+                } else {
+                    &fg
+                },
+                true,
+            )?;
+        }
+        for y in [94., 192.] {
+            target.DrawLine(
+                point(Point::new(16. * self.scale, y * self.scale)),
+                point(Point::new((WIDTH - 16.) * self.scale, y * self.scale)),
+                &key_brush,
+                self.scale,
+                None,
+            );
+        }
+        target.DrawLine(
+            point(Point::new(224. * self.scale, 116. * self.scale)),
+            point(Point::new(224. * self.scale, 130. * self.scale)),
+            &key_brush,
+            self.scale,
+            None,
+        );
+        if !error.is_empty() {
+            text(
+                error,
+                Rect {
+                    left: 16.,
+                    top: HEIGHT + 2.,
+                    right: WIDTH - 16.,
+                    bottom: HEIGHT + 53.,
+                },
+                &fg,
+                false,
+            )?;
+        }
+        if keyboard_focus {
+            if let Some(index) = focus.filter(|&i| i >= 10 || listening == Some(i)) {
+                let (hint, anchor) = match index {
+                    10 => ("Reset all shortcuts".to_owned(), schema::reset_rect()),
+                    11 => ("Close".to_owned(), schema::close_rect()),
+                    i => {
+                        let hint = if i == 0 {
+                            "Press a shortcut · Esc cancels".into()
+                        } else {
+                            "Press a single key · Esc cancels".into()
+                        };
+                        (hint, keys[i])
+                    }
+                };
+                let format = self.write.CreateTextFormat(
+                    w!("Segoe UI"),
+                    None,
+                    DWRITE_FONT_WEIGHT_NORMAL,
+                    DWRITE_FONT_STYLE_NORMAL,
+                    DWRITE_FONT_STRETCH_NORMAL,
+                    11. * self.scale,
+                    w!("en-us"),
+                )?;
+                let chars: Vec<u16> = hint.encode_utf16().collect();
+                let layout = self.write.CreateTextLayout(
+                    &chars,
+                    &format,
+                    (WIDTH - 40.) * self.scale,
+                    40. * self.scale,
+                )?;
+                let mut metrics = DWRITE_TEXT_METRICS::default();
+                layout.GetMetrics(&mut metrics)?;
+                let width = metrics.width / self.scale + 16.;
+                let left =
+                    ((anchor.left + anchor.right - width) / 2.).clamp(8., WIDTH - width - 8.);
+                let bounds = Rect {
+                    left,
+                    top: anchor.bottom + 8.,
+                    right: left + width,
+                    bottom: anchor.bottom + 33.,
+                };
+                fill(bounds, &selected_brush, 4.);
+                text(&hint, bounds, &fg, true)?;
+            }
+        }
+        target.EndDraw(None, None)
     }
     pub unsafe fn paint(
         &self,
@@ -730,7 +1182,8 @@ impl Renderer {
                         index,
                         cell,
                         if index == 4 { &white } else { &foreground },
-                    );
+                        20.,
+                    )?;
                 }
             }
             if !hint.is_empty() {
