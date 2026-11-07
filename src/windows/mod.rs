@@ -56,10 +56,8 @@ impl Click {
 
 const TRAY: u32 = WM_APP + 1;
 const HOTKEY: i32 = 0x4D59;
-const CAPTURE: usize = 1;
+const DARK_THEME: usize = 3;
 const QUIT: usize = 2;
-const THEME_DARK: usize = 3;
-const THEME_LIGHT: usize = 4;
 const START_AT_LOGIN: usize = 5;
 const INPUT_SCHEMA: usize = 6;
 const HOTKEY_ALTERNATE: i32 = HOTKEY + 1;
@@ -610,8 +608,6 @@ impl App {
         }
         self.bindings = bindings;
         self.input_hints = InputHints::new(&self.bindings);
-        update_tray_tip(&mut self.tray, &self.bindings);
-        let _ = Shell_NotifyIconW(NIM_MODIFY, &self.tray);
         self.repaint();
         Ok(())
     }
@@ -633,31 +629,14 @@ impl App {
     }
     unsafe fn tray_menu(&mut self) {
         if let Ok(menu) = CreatePopupMenu() {
-            let capture_label = HSTRING::from(format!(
-                "Capture / blank canvas    {}",
-                self.bindings.capture.label()
-            ));
-            let _ = AppendMenuW(menu, MF_STRING, CAPTURE, &capture_label);
             let _ = AppendMenuW(menu, MF_STRING, INPUT_SCHEMA, w!("Input schema"));
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-            if let Ok(themes) = CreatePopupMenu() {
-                let _ = AppendMenuW(themes, MF_STRING, THEME_DARK, w!("Dark"));
-                let _ = AppendMenuW(themes, MF_STRING, THEME_LIGHT, w!("Light"));
-                let selected = match self.theme {
-                    Theme::Dark => THEME_DARK,
-                    Theme::Light => THEME_LIGHT,
-                };
-                let _ = CheckMenuRadioItem(
-                    themes,
-                    THEME_DARK as u32,
-                    THEME_LIGHT as u32,
-                    selected as u32,
-                    MF_BYCOMMAND.0,
-                );
-                if AppendMenuW(menu, MF_POPUP, themes.0 as usize, w!("Theme")).is_err() {
-                    let _ = DestroyMenu(themes);
-                }
-            }
+            let theme_flags = if self.theme == Theme::Dark {
+                MF_STRING | MF_CHECKED
+            } else {
+                MF_STRING
+            };
+            let _ = AppendMenuW(menu, theme_flags, DARK_THEME, w!("Dark Theme"));
             let startup_state = startup::enabled();
             let (startup_flags, startup_label) = match &startup_state {
                 Ok(true) if startup::disabled_in_windows() => (
@@ -673,7 +652,7 @@ impl App {
             };
             let _ = AppendMenuW(menu, startup_flags, START_AT_LOGIN, startup_label);
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-            let _ = AppendMenuW(menu, MF_STRING, QUIT, w!("Quit Myosotis"));
+            let _ = AppendMenuW(menu, MF_STRING, QUIT, w!("Quit"));
             let mut p = POINT::default();
             let _ = GetCursorPos(&mut p);
             let _ = SetForegroundWindow(self.hwnd);
@@ -690,18 +669,16 @@ impl App {
             let _ = DestroyMenu(menu);
             let _ = PostMessageW(self.hwnd, WM_NULL, WPARAM(0), LPARAM(0));
             match action {
-                CAPTURE => {
-                    if let Err(e) = self.activate() {
-                        show_error(&e.to_string());
-                    }
-                }
                 INPUT_SCHEMA => {
                     if let Err(error) = schema::open(self.hwnd, self.theme, &self.bindings) {
                         show_error(&format!("Could not open Input schema.\n\n{error}"));
                     }
                 }
-                THEME_DARK => self.change_theme(Theme::Dark),
-                THEME_LIGHT => self.change_theme(Theme::Light),
+                DARK_THEME => self.change_theme(if self.theme == Theme::Dark {
+                    Theme::Light
+                } else {
+                    Theme::Dark
+                }),
                 START_AT_LOGIN => {
                     // Recheck after the menu closes in case another process changed the entry.
                     if let Err(error) =
@@ -924,12 +901,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     result.unwrap_or_else(|| DefWindowProcW(hwnd, msg, wparam, lparam))
 }
 
-fn update_tray_tip(tray: &mut NOTIFYICONDATAW, bindings: &Bindings) {
+fn update_tray_tip(tray: &mut NOTIFYICONDATAW) {
     tray.szTip.fill(0);
-    let tip = format!(
-        "Myosotis · {} · Right-click for options",
-        bindings.capture.label()
-    );
+    let tip = concat!("Myosotis v", env!("CARGO_PKG_VERSION"));
     for (slot, unit) in tray.szTip.iter_mut().take(127).zip(tip.encode_utf16()) {
         *slot = unit;
     }
@@ -1037,7 +1011,7 @@ pub fn run() -> Result<()> {
             hIcon: wc.hIcon,
             ..Default::default()
         };
-        update_tray_tip(&mut tray, &bindings);
+        update_tray_tip(&mut tray);
         if !Shell_NotifyIconW(NIM_ADD, &tray).as_bool() {
             let _ = UnregisterHotKey(hwnd, HOTKEY);
             let _ = DestroyWindow(hwnd);

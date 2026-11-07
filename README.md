@@ -54,7 +54,7 @@ Shortcuts save immediately to `%LOCALAPPDATA%\Myosotis\settings.toml`. Conflicts
 
 ### Appearance and settings
 
-Right-click the notification-area icon, open **Theme**, and choose **Dark** or **Light**. A radio mark shows the current choice. Dark is the default; changes apply immediately, including during a capture. The theme changes the toolbar and guidance panels. Screenshots, white canvases, and copied annotations keep their original colors.
+Right-click the notification-area icon and toggle **Dark Theme**. A check mark means Dark; unchecked means Light. Dark is the default; changes apply immediately, including during a capture. The theme changes the toolbar and guidance panels. Screenshots, white canvases, and copied annotations keep their original colors.
 
 Myosotis saves theme and shortcut preferences in `%LOCALAPPDATA%\Myosotis\settings.toml` when you change them. If saving fails, the theme still applies for the current session and Myosotis reports the problem. Missing or invalid settings use Dark at startup.
 
