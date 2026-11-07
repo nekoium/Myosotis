@@ -161,11 +161,6 @@ impl Schema {
             return;
         }
         if let Some(index) = self.listening {
-            if key == 0x1b {
-                self.cancel();
-                self.repaint();
-                return;
-            }
             if key == 0x09 {
                 self.cancel();
             } else {
@@ -345,11 +340,7 @@ impl Schema {
             }
             WM_KEYDOWN | WM_SYSKEYDOWN => self.key(wparam.0 as u16, lparam.0 & (1 << 30) != 0),
             WM_KEYUP | WM_SYSKEYUP => self.blocked.retain(|&key| key != wparam.0 as u16),
-            WM_KILLFOCUS => {
-                self.cancel();
-                self.focus = None;
-                self.repaint();
-            }
+            WM_KILLFOCUS => self.hide(),
             WM_CLOSE => self.hide(),
             WM_DPICHANGED => {
                 self.scale = (wparam.0 & 0xffff) as f32 / 96.;
@@ -442,7 +433,7 @@ pub unsafe fn open(owner: HWND, theme: Theme, bindings: &Bindings) -> Result<()>
     let width = (WIDTH * scale).round() as i32;
     let height = (HEIGHT * scale).round() as i32;
     let hwnd = CreateWindowExW(
-        WINDOW_EX_STYLE::default(),
+        WS_EX_TOOLWINDOW,
         CLASS,
         w!("Myosotis — Input schema"),
         WS_POPUP | WS_SYSMENU,
@@ -531,7 +522,7 @@ pub unsafe fn close() {
 mod tests {
     use super::*;
     #[test]
-    fn recording_cancels_on_escape_or_focus_loss_and_reset_requests_only_defaults() -> Result<()> {
+    fn dismissal_clears_recording_and_focus_and_reset_requests_only_defaults() -> Result<()> {
         unsafe {
             let hwnd = CreateWindowExW(
                 WINDOW_EX_STYLE::default(),
@@ -561,7 +552,7 @@ mod tests {
                     theme: Theme::Light,
                     focus: Some(1),
                     listening: Some(1),
-                    hover: None,
+                    hover: Some(1),
                     scale: 1.,
                     window_size: (0, 0),
                     pending: None,
@@ -579,14 +570,43 @@ mod tests {
                 assert_eq!(window.window_size, original_size);
                 assert!(IsWindow(hwnd).as_bool());
                 window.key(0x1b, false);
+                assert_eq!(
+                    window.listening,
+                    Some(1),
+                    "duplicate Escape keeps recording"
+                );
+                assert_eq!(window.focus, Some(1));
+                assert_eq!(window.hover, Some(1));
+                assert!(window.pending.is_none());
+
+                window.bindings.set(Action::Cancel, b'F' as u16).unwrap();
+                window.listening = Some(Action::Cancel as usize + 1);
+                window.key(0x1b, false);
                 assert_eq!(window.listening, None);
                 assert!(window.blocked.is_empty());
-                assert_eq!(window.bindings, bindings);
+                assert_eq!(window.focus, Some(1), "recording Escape must not hide");
+                assert_eq!(window.hover, Some(1));
+                assert_eq!(window.pending.take(), Some(bindings.clone()));
+                window.bindings = bindings.clone();
+                window.focus = Some(0);
+                window.hover = Some(0);
+                window.blocked.push(b'W' as u16);
                 window.listening = Some(0);
                 window.message(WM_KILLFOCUS, WPARAM(0), LPARAM(0));
                 assert_eq!(window.listening, None);
                 assert_eq!(window.focus, None);
+                assert_eq!(window.hover, None);
+                assert!(window.blocked.is_empty());
                 assert!(window.pending.is_none());
+                window.focus = Some(CLOSE);
+                window.hover = Some(CLOSE);
+                window.key(0x1b, false);
+                assert_eq!(window.focus, None);
+                assert_eq!(window.hover, None);
+                assert!(
+                    IsWindow(hwnd).as_bool(),
+                    "dismissal keeps the reusable window"
+                );
                 window.activate(RESET);
                 assert_eq!(window.pending, Some(Bindings::default()));
                 assert_eq!(

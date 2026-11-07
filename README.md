@@ -46,7 +46,7 @@ Launching the executable again opens the resident app. The default capture short
 
 ### Input schema
 
-Click the notification-area icon to view or change shortcuts in **Input schema**. You can also right-click the icon and choose **Input schema**. Click a keycap and press its replacement. You can also use Tab to focus a keycap and Enter or Space to start editing. Escape cancels an edit; closing the window keeps your changes.
+Click the notification-area icon to view or change shortcuts in **Input schema**. You can also right-click the icon and choose **Input schema**. Click a keycap and press its replacement. You can also use Tab to focus a keycap and Enter or Space to start editing. Escape dismisses Input schema when you are not editing. While editing, Escape is recorded as a shortcut key if valid and available; Tab or clicking empty space cancels the edit. Switching to another window dismisses Input schema and cancels any unfinished edit; saved changes remain. The floating window stays out of the taskbar and Alt+Tab. Reopen it from the notification-area icon.
 
 Capture accepts a key combined with Ctrl, Alt, or Win. The capture overlay uses single keys. Space drawing, Enter completion, and mouse gestures remain fixed; Space, Enter, and Tab cannot be reassigned. The window shows each action's primary shortcut. The restore icon beside Close resets all shortcuts, including Capture, without changing theme or startup preferences. It is disabled when the defaults are active.
 

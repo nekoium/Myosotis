@@ -196,6 +196,18 @@ fn schema_renders_both_themes_and_recording_at_common_dpi_without_desktop_input(
                     std::fs::create_dir_all(&directory).unwrap();
                     std::fs::write(directory.join(format!("schema-{theme:?}.bmp")), bmp).unwrap();
                 }
+                for index in [1, 10, 11] {
+                    let mut changed = bindings.clone();
+                    changed.set(crate::input::Action::Pen, b'Q' as u16).unwrap();
+                    renderer.paint_schema_on(&target, &changed, None, None, Some(index))?;
+                    let hovered = surface.pixels().to_vec();
+                    renderer.paint_schema_on(&target, &changed, Some(index), None, None)?;
+                    assert_eq!(
+                        surface.pixels(),
+                        hovered,
+                        "focus must use the neutral hover fill without an extra outline"
+                    );
+                }
                 renderer.paint_schema_on(&target, &bindings, Some(1), Some(1), Some(1))?;
                 assert_eq!(pixel(39., 155.), &[216, 101, 88], "missing recording state");
             }

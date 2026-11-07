@@ -775,18 +775,6 @@ impl Renderer {
                 brush,
             )
         };
-        let outline = |r: Rect| {
-            target.DrawRoundedRectangle(
-                &D2D1_ROUNDED_RECT {
-                    rect: scaled(r),
-                    radiusX: 4. * self.scale,
-                    radiusY: 4. * self.scale,
-                },
-                &accent,
-                self.scale,
-                None,
-            )
-        };
         let text =
             |value: &str, r: Rect, brush: &ID2D1SolidColorBrush, center: bool| -> Result<()> {
                 let title = !center && r.top < 40.;
@@ -888,11 +876,8 @@ impl Renderer {
         );
         for (index, r) in [(10, schema::reset_rect()), (11, schema::close_rect())] {
             let enabled = index == 11 || bindings != &crate::input::Bindings::default();
-            if enabled && hover == Some(index) {
+            if enabled && (hover == Some(index) || focus == Some(index)) {
                 fill(r, &key_brush, 4.);
-            }
-            if enabled && focus == Some(index) {
-                outline(r);
             }
             let r = Rect {
                 left: r.left * self.scale,
@@ -904,7 +889,7 @@ impl Renderer {
                 target,
                 if index == 10 { 10 } else { 5 },
                 r,
-                if enabled && (index != 11 || hover == Some(index)) {
+                if enabled && (index != 11 || hover == Some(index) || focus == Some(index)) {
                     &fg
                 } else {
                     &muted
@@ -945,21 +930,13 @@ impl Renderer {
                 r,
                 if listening == Some(index) {
                     &accent
-                } else if hover == Some(index) {
+                } else if hover == Some(index) || focus == Some(index) {
                     &selected_brush
                 } else {
                     &key_brush
                 },
                 4.,
             );
-            if focus == Some(index) && listening != Some(index) {
-                outline(Rect {
-                    left: r.left - 2.,
-                    top: r.top - 2.,
-                    right: r.right + 2.,
-                    bottom: r.bottom + 2.,
-                });
-            }
             text(
                 &value,
                 r,
