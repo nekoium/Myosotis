@@ -34,6 +34,7 @@ fn app() -> App {
         tray: NOTIFYICONDATAW::default(),
         tray_icon: TrayIcon::default(),
         taskbar_created: 0,
+        schema_tray_close: None,
     }
 }
 
@@ -55,6 +56,20 @@ fn failed_tray_refresh_preserves_the_existing_owned_icon() {
         drop(app);
         assert!(GetIconInfo(original, &mut ICONINFO::default()).is_err());
     }
+}
+
+#[test]
+fn tray_toggle_keeps_close_intent_after_focus_loss_finishes_hiding_schema() {
+    let mut app = app();
+    app.schema_tray_close = Some(true);
+    unsafe {
+        app.message(TRAY, WPARAM(0), LPARAM(WM_LBUTTONUP as isize));
+    }
+    assert_eq!(app.schema_tray_close, None);
+    assert!(
+        !schema::visible(),
+        "button-up must not reopen a schema hidden after button-down"
+    );
 }
 
 #[test]

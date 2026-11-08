@@ -178,6 +178,37 @@ fn schema_renders_both_themes_and_recording_at_common_dpi_without_desktop_input(
                 } else {
                     bg[0] > 230
                 });
+                let bounds = keys[1];
+                let idle = pixel(bounds.left + 5., bounds.top + 4.).to_vec();
+                let mut controls =
+                    super::super::schema::control_states(&bindings, None, None, None);
+                controls[1][0] = 0.5;
+                renderer.paint_schema_frame(&target, &bindings, None, &controls)?;
+                let halfway = pixel(bounds.left + 5., bounds.top + 4.).to_vec();
+                controls[1][0] = 1.;
+                renderer.paint_schema_frame(&target, &bindings, None, &controls)?;
+                let hovered = pixel(bounds.left + 5., bounds.top + 4.).to_vec();
+                for channel in 0..3 {
+                    let expected = (idle[channel] as f32 + hovered[channel] as f32) / 2.;
+                    assert!(
+                        (halfway[channel] as f32 - expected).abs() <= 1.,
+                        "hover must blend, not jump"
+                    );
+                }
+                controls[1][1] = 0.5;
+                renderer.paint_schema_frame(&target, &bindings, Some(1), &controls)?;
+                let recording_halfway = pixel(bounds.left + 5., bounds.top + 4.).to_vec();
+                controls[1][1] = 1.;
+                renderer.paint_schema_frame(&target, &bindings, Some(1), &controls)?;
+                let recording = pixel(bounds.left + 5., bounds.top + 4.).to_vec();
+                for channel in 0..3 {
+                    let expected = (hovered[channel] as f32 + recording[channel] as f32) / 2.;
+                    assert!(
+                        (recording_halfway[channel] as f32 - expected).abs() <= 1.,
+                        "recording must blend independently of its text"
+                    );
+                }
+                renderer.paint_schema_on(&target, &bindings, None, None, None)?;
                 let header_distance = |bounds: Rect, expected: [u8; 3]| {
                     let mut closest = u8::MAX;
                     for y in (bounds.top * scale) as usize..(bounds.bottom * scale) as usize {

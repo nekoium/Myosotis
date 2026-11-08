@@ -731,14 +731,14 @@ impl Renderer {
         Ok(keys)
     }
     pub unsafe fn paint_schema(&self, window: &super::schema::Schema) -> Result<()> {
-        self.paint_schema_on(
+        self.paint_schema_frame(
             &self.target.cast()?,
             &window.bindings,
-            window.focus,
             window.listening,
-            window.hover,
+            &window.colors(),
         )
     }
+    #[cfg(test)]
     unsafe fn paint_schema_on(
         &self,
         target: &ID2D1RenderTarget,
@@ -746,6 +746,20 @@ impl Renderer {
         focus: Option<usize>,
         listening: Option<usize>,
         hover: Option<usize>,
+    ) -> Result<()> {
+        self.paint_schema_frame(
+            target,
+            bindings,
+            listening,
+            &super::schema::control_states(bindings, focus, listening, hover),
+        )
+    }
+    unsafe fn paint_schema_frame(
+        &self,
+        target: &ID2D1RenderTarget,
+        bindings: &crate::input::Bindings,
+        listening: Option<usize>,
+        controls: &[[f32; 3]; 12],
     ) -> Result<()> {
         use super::schema::{self, WIDTH};
         let (surface, foreground, key, selected, muted) = match self.theme {
@@ -765,7 +779,14 @@ impl Renderer {
             ),
         };
         let fg = target.CreateSolidColorBrush(&foreground, None)?;
-        let muted = target.CreateSolidColorBrush(&muted, None)?;
+        let blend = |a: D2D1_COLOR_F, b: D2D1_COLOR_F, t: f32| {
+            color(
+                a.r + (b.r - a.r) * t,
+                a.g + (b.g - a.g) * t,
+                a.b + (b.b - a.b) * t,
+                a.a + (b.a - a.a) * t,
+            )
+        };
         let key_brush = target.CreateSolidColorBrush(&key, None)?;
         let selected_brush = target.CreateSolidColorBrush(&selected, None)?;
         let accent = target.CreateSolidColorBrush(&INTERFACE_ACCENT, None)?;
@@ -888,10 +909,11 @@ impl Renderer {
             &center,
         );
         for (index, r) in [(10, schema::reset_rect()), (11, schema::close_rect())] {
-            let enabled = index == 11 || bindings != &crate::input::Bindings::default();
-            if enabled && (hover == Some(index) || focus == Some(index)) {
-                fill(r, &key_brush, 4.);
-            }
+            let [emphasis, _, enabled] = controls[index];
+            let background = target.CreateSolidColorBrush(&blend(surface, key, emphasis), None)?;
+            let foreground =
+                target.CreateSolidColorBrush(&blend(muted, foreground, enabled), None)?;
+            fill(r, &background, 4.);
             let r = Rect {
                 left: r.left * self.scale,
                 top: r.top * self.scale,
@@ -902,7 +924,7 @@ impl Renderer {
                 target,
                 if index == 10 { 10 } else { 5 },
                 r,
-                if enabled { &fg } else { &muted },
+                &foreground,
                 14.,
             )?;
         }
@@ -935,27 +957,17 @@ impl Renderer {
                 bindings.label(crate::input::Action::ALL[index - 1])
             };
             let r = key_rect;
-            fill(
-                r,
-                if listening == Some(index) {
-                    &accent
-                } else if hover == Some(index) || focus == Some(index) {
-                    &selected_brush
-                } else {
-                    &key_brush
-                },
-                4.,
-            );
-            text(
-                &value,
-                r,
-                if listening == Some(index) {
-                    &white
-                } else {
-                    &fg
-                },
-                true,
+            let [emphasis, recording, _] = controls[index];
+            let background = target.CreateSolidColorBrush(
+                &blend(blend(key, selected, emphasis), INTERFACE_ACCENT, recording),
+                None,
             )?;
+            let foreground = target.CreateSolidColorBrush(
+                &blend(foreground, color(1., 1., 1., 1.), recording),
+                None,
+            )?;
+            fill(r, &background, 4.);
+            text(&value, r, &foreground, true)?;
         }
         for y in [94., 192.] {
             target.DrawLine(

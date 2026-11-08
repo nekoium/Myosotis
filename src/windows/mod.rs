@@ -154,6 +154,7 @@ struct App {
     tray: NOTIFYICONDATAW,
     tray_icon: TrayIcon,
     taskbar_created: u32,
+    schema_tray_close: Option<bool>,
 }
 impl App {
     unsafe fn refresh_tray_icon(&mut self, message: NOTIFY_ICON_MESSAGE) {
@@ -935,8 +936,15 @@ impl App {
                 }
             }
             TRAY => match lparam.0 as u32 {
+                WM_LBUTTONDOWN => self.schema_tray_close = Some(schema::visible()),
                 WM_LBUTTONUP => {
-                    if let Err(error) = schema::open(self.hwnd, self.theme, &self.bindings) {
+                    let close = self
+                        .schema_tray_close
+                        .take()
+                        .unwrap_or_else(schema::visible);
+                    if close {
+                        schema::dismiss();
+                    } else if let Err(error) = schema::open(self.hwnd, self.theme, &self.bindings) {
                         show_error(&format!("Could not open Input schema.\n\n{error}"));
                     }
                 }
@@ -1120,6 +1128,7 @@ pub fn run() -> Result<()> {
                 tray,
                 tray_icon,
                 taskbar_created: RegisterWindowMessageW(w!("TaskbarCreated")),
+                schema_tray_close: None,
             })
         });
         if std::env::args().any(|arg| arg == "--capture") {
