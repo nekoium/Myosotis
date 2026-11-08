@@ -32,7 +32,7 @@ try {
 } finally { $g.Dispose() }
 $images = @()
 try {
-    foreach ($size in @(16,32,48,256)) {
+    foreach ($size in @(16,20,24,32,40,48,64,96,128,256)) {
         $scaled = New-Object Drawing.Bitmap $size,$size
         $sg = [Drawing.Graphics]::FromImage($scaled)
         $stream = New-Object IO.MemoryStream
