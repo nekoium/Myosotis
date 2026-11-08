@@ -819,10 +819,10 @@ impl Renderer {
         text(
             "Input schema",
             Rect {
-                left: 39.,
-                top: 6.,
+                left: 40.,
+                top: 10.,
                 right: 200.,
-                bottom: 36.,
+                bottom: 40.,
             },
             &fg,
             false,
@@ -838,8 +838,8 @@ impl Renderer {
             let angle = (degrees as f32).to_radians();
             let p = |x: f32, y: f32| {
                 point(Point::new(
-                    (22. + (x * angle.cos() - y * angle.sin()) * 1.16 * 14. / 256.) * self.scale,
-                    (21. + (x * angle.sin() + y * angle.cos()) * 1.16 * 14. / 256.) * self.scale,
+                    (22. + (x * angle.cos() - y * angle.sin()) * 1.16 * 18. / 256.) * self.scale,
+                    (25. + (x * angle.sin() + y * angle.cos()) * 1.16 * 18. / 256.) * self.scale,
                 ))
             };
             let petal = self.factory.CreatePathGeometry()?;
@@ -868,9 +868,9 @@ impl Renderer {
             target.CreateSolidColorBrush(&color(245. / 255., 200. / 255., 92. / 255., 1.), None)?;
         target.FillEllipse(
             &D2D1_ELLIPSE {
-                point: point(Point::new(22. * self.scale, 21. * self.scale)),
-                radiusX: 23. * 1.16 * 14. / 256. * self.scale,
-                radiusY: 23. * 1.16 * 14. / 256. * self.scale,
+                point: point(Point::new(22. * self.scale, 25. * self.scale)),
+                radiusX: 23. * 1.16 * 18. / 256. * self.scale,
+                radiusY: 23. * 1.16 * 18. / 256. * self.scale,
             },
             &center,
         );
@@ -889,11 +889,7 @@ impl Renderer {
                 target,
                 if index == 10 { 10 } else { 5 },
                 r,
-                if enabled && (index != 11 || hover == Some(index) || focus == Some(index)) {
-                    &fg
-                } else {
-                    &muted
-                },
+                if enabled { &fg } else { &muted },
                 14.,
             )?;
         }

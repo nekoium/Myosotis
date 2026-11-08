@@ -178,6 +178,38 @@ fn schema_renders_both_themes_and_recording_at_common_dpi_without_desktop_input(
                 } else {
                     bg[0] > 230
                 });
+                let header_distance = |bounds: Rect, expected: [u8; 3]| {
+                    let mut closest = u8::MAX;
+                    for y in (bounds.top * scale) as usize..(bounds.bottom * scale) as usize {
+                        for x in (bounds.left * scale) as usize..(bounds.right * scale) as usize {
+                            let offset = (y * width as usize + x) * 4;
+                            let distance = surface.pixels()[offset..offset + 3]
+                                .iter()
+                                .zip(expected)
+                                .map(|(&actual, expected)| actual.abs_diff(expected))
+                                .max()
+                                .unwrap();
+                            closest = closest.min(distance);
+                        }
+                    }
+                    closest
+                };
+                let (foreground, muted) = match theme {
+                    Theme::Dark => ([242, 240, 240], [176, 166, 166]),
+                    Theme::Light => ([36, 31, 31], [112, 102, 102]),
+                };
+                assert!(
+                    header_distance(super::super::schema::close_rect(), foreground) < 12,
+                    "Close must use foreground contrast without hover or focus"
+                );
+                assert!(
+                    header_distance(super::super::schema::reset_rect(), muted) < 12,
+                    "unavailable Reset must retain muted contrast"
+                );
+                assert!(
+                    header_distance(super::super::schema::reset_rect(), foreground) > 30,
+                    "unavailable Reset must not use foreground contrast"
+                );
                 // Optional memory-only review artifact, never a desktop screenshot.
                 if scale == 2. && std::env::var_os("MYOSOTIS_SCHEMA_PREVIEW").is_some() {
                     let cropped_height = (super::super::schema::HEIGHT * scale) as i32;
@@ -196,9 +228,14 @@ fn schema_renders_both_themes_and_recording_at_common_dpi_without_desktop_input(
                     std::fs::create_dir_all(&directory).unwrap();
                     std::fs::write(directory.join(format!("schema-{theme:?}.bmp")), bmp).unwrap();
                 }
+                let mut changed = bindings.clone();
+                changed.set(crate::input::Action::Pen, b'Q' as u16).unwrap();
+                renderer.paint_schema_on(&target, &changed, None, None, None)?;
+                assert!(
+                    header_distance(super::super::schema::reset_rect(), foreground) < 12,
+                    "available Reset must match Close's foreground contrast"
+                );
                 for index in [1, 10, 11] {
-                    let mut changed = bindings.clone();
-                    changed.set(crate::input::Action::Pen, b'Q' as u16).unwrap();
                     renderer.paint_schema_on(&target, &changed, None, None, Some(index))?;
                     let hovered = surface.pixels().to_vec();
                     renderer.paint_schema_on(&target, &changed, Some(index), None, None)?;
