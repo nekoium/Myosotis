@@ -68,9 +68,22 @@ impl NumberBadge {
         let right = width + bounds.right;
         let bottom = height + bounds.bottom;
         let radius = 12. * scale;
+        // Optical corrections for Segoe UI Semibold's asymmetric single-digit ink weight.
+        let optical = match number {
+            1 => Point::new(-0.5, 0.25),
+            2 => Point::new(0., -0.25),
+            3 => Point::new(-0.25, 0.),
+            4 => Point::new(-0.25, -0.25),
+            5 | 9 => Point::new(0., 0.25),
+            7 => Point::new(0., 1.),
+            _ => Point::default(),
+        };
         Ok(Self {
             layout,
-            offset: Point::new(-(left + right) / 2., -(top + bottom) / 2.),
+            offset: Point::new(
+                -(left + right) / 2. + optical.x * scale,
+                -(top + bottom) / 2. + optical.y * scale,
+            ),
             half_width: radius.max((right - left) / 2. + 8. * scale),
             radius,
         })

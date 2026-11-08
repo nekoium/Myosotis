@@ -383,12 +383,17 @@ fn number_alignment_matches_active_cached_and_export_paths() -> Result<()> {
                         assert!(left <= right && top <= bottom, "missing {number} in {path}");
                         let center_x = (left + right + 1) as f32 / 2.;
                         let center_y = (top + bottom + 1) as f32 / 2.;
+                        let optical_allowance = if (1..=9).contains(&number) {
+                            1. * scale
+                        } else {
+                            0.
+                        };
                         assert!(
-                            (center_x - 320.).abs() <= 1.,
+                            (center_x - 320.).abs() <= 1. + optical_allowance,
                             "{path} {number} at {scale}, {theme:?}: x={center_x}"
                         );
                         assert!(
-                            (center_y - 240.).abs() <= 1.,
+                            (center_y - 240.).abs() <= 1. + optical_allowance,
                             "{path} {number} at {scale}, {theme:?}: y={center_y}"
                         );
                     }

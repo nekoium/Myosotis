@@ -41,6 +41,17 @@ fn numeral_pixels_are_centered_and_padded_at_common_display_scales() -> Result<(
             numbers.dedup();
             for number in numbers {
                 let badge = NumberBadge::new(&write, &format, number, scale)?;
+                if number >= 10 {
+                    let bounds = badge.layout.GetOverhangMetrics()?;
+                    assert_eq!(
+                        badge.offset.x,
+                        -(-bounds.left + 256. * scale + bounds.right) / 2.
+                    );
+                    assert_eq!(
+                        badge.offset.y,
+                        -(-bounds.top + 64. * scale + bounds.bottom) / 2.
+                    );
+                }
                 target.BeginDraw();
                 target.Clear(Some(&color(0.14, 0.14, 0.15, 1.)));
                 badge.draw(&target, Point::new(320., 80.), &ink, &white);
@@ -50,9 +61,15 @@ fn numeral_pixels_are_centered_and_padded_at_common_display_scales() -> Result<(
                 let mut top = 160;
                 let mut bottom = 0;
                 let mut coral_pixels = 0;
+                let (mut mass, mut weighted_x, mut weighted_y) = (0., 0., 0.);
                 for (i, pixel) in surface.pixels().as_chunks::<4>().0.iter().enumerate() {
                     let x = i % 640;
                     let y = i / 640;
+                    // Green-channel coverage isolates white glyph ink from coral and dark background.
+                    let weight = (pixel[1] as f32 - 70.).max(0.) / 185.;
+                    mass += weight;
+                    weighted_x += (x as f32 + 0.5) * weight;
+                    weighted_y += (y as f32 + 0.5) * weight;
                     if pixel[0] > 220 && pixel[1] > 220 && pixel[2] > 220 {
                         left = left.min(x);
                         right = right.max(x);
@@ -69,12 +86,29 @@ fn numeral_pixels_are_centered_and_padded_at_common_display_scales() -> Result<(
                 );
                 let center_x = (left + right + 1) as f32 / 2.;
                 let center_y = (top + bottom + 1) as f32 / 2.;
+                if (1..=9).contains(&number) && scale == 2. {
+                    assert!(
+                        (weighted_x / mass - 320.).abs() <= 0.6,
+                        "optical x for {number}: {}",
+                        weighted_x / mass
+                    );
+                    assert!(
+                        (weighted_y / mass - 80.).abs() <= 0.8,
+                        "optical y for {number}: {}",
+                        weighted_y / mass
+                    );
+                }
+                let optical_allowance = if (1..=9).contains(&number) {
+                    1. * scale
+                } else {
+                    0.
+                };
                 assert!(
-                    (center_x - 320.).abs() <= 1.,
+                    (center_x - 320.).abs() <= 1. + optical_allowance,
                     "{number} at {scale}: x={center_x}"
                 );
                 assert!(
-                    (center_y - 80.).abs() <= 1.,
+                    (center_y - 80.).abs() <= 1. + optical_allowance,
                     "{number} at {scale}: y={center_y}"
                 );
                 assert!(left as f32 >= 320. - badge.half_width + 7. * scale - 1.);
