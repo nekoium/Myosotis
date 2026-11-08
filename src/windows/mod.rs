@@ -2,6 +2,8 @@ mod capture;
 #[cfg(test)]
 mod completion_tests;
 #[cfg(test)]
+mod icon_tests;
+#[cfg(test)]
 mod input_tests;
 mod render;
 mod schema;
@@ -61,6 +63,42 @@ const QUIT: usize = 2;
 const START_AT_LOGIN: usize = 5;
 const INPUT_SCHEMA: usize = 6;
 const HOTKEY_ALTERNATE: i32 = HOTKEY + 1;
+
+#[derive(Default)]
+struct TrayIcon(HICON);
+impl TrayIcon {
+    unsafe fn load(width: i32, height: i32) -> Result<Self> {
+        let handle = LoadImageW(
+            GetModuleHandleW(None)?,
+            PCWSTR(std::ptr::without_provenance(1)),
+            IMAGE_ICON,
+            width,
+            height,
+            LR_DEFAULTCOLOR,
+        )?;
+        Ok(Self(HICON(handle.0)))
+    }
+
+    unsafe fn small() -> Result<Self> {
+        let taskbar = FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()).unwrap_or_default();
+        let dpi = GetDpiForWindow(taskbar);
+        let dpi = if dpi == 0 { GetDpiForSystem() } else { dpi };
+        Self::load(
+            GetSystemMetricsForDpi(SM_CXSMICON, dpi),
+            GetSystemMetricsForDpi(SM_CYSMICON, dpi),
+        )
+    }
+}
+impl Drop for TrayIcon {
+    fn drop(&mut self) {
+        if !self.0.is_invalid() {
+            unsafe {
+                let _ = DestroyIcon(self.0);
+            }
+        }
+    }
+}
+
 struct InputHints {
     toolbar: [String; 6],
     workflow: String,
@@ -114,9 +152,29 @@ struct App {
     hover: Option<(u8, Instant)>,
     hint: String,
     tray: NOTIFYICONDATAW,
+    tray_icon: TrayIcon,
     taskbar_created: u32,
 }
 impl App {
+    unsafe fn refresh_tray_icon(&mut self, message: NOTIFY_ICON_MESSAGE) {
+        match TrayIcon::small() {
+            Ok(icon) => {
+                let mut tray = self.tray;
+                tray.hIcon = icon.0;
+                if Shell_NotifyIconW(message, &tray).as_bool() {
+                    self.tray = tray;
+                    self.tray_icon = icon;
+                    return;
+                }
+                eprintln!("Could not refresh the Myosotis tray icon");
+            }
+            Err(error) => eprintln!("Could not load the Myosotis tray icon: {error}"),
+        }
+        if message == NIM_ADD {
+            let _ = Shell_NotifyIconW(NIM_ADD, &self.tray);
+        }
+    }
+
     unsafe fn activate(&mut self) -> Result<()> {
         if self.visible {
             return Ok(());
@@ -862,7 +920,13 @@ impl App {
                 let _ = ReleaseCapture();
                 self.repaint();
             }
-            WM_DISPLAYCHANGE if self.visible => self.close_overlay(),
+            WM_DISPLAYCHANGE => {
+                if self.visible {
+                    self.close_overlay();
+                }
+                self.refresh_tray_icon(NIM_MODIFY);
+            }
+            WM_SETTINGCHANGE => self.refresh_tray_icon(NIM_MODIFY),
             WM_CLOSE => {
                 if self.visible {
                     self.close_overlay();
@@ -879,9 +943,7 @@ impl App {
                 WM_RBUTTONUP | WM_CONTEXTMENU => self.tray_menu(),
                 _ => {}
             },
-            _ if msg == self.taskbar_created => {
-                let _ = Shell_NotifyIconW(NIM_ADD, &self.tray);
-            }
+            _ if msg == self.taskbar_created => self.refresh_tray_icon(NIM_ADD),
             _ => return None,
         }
         Some(LRESULT(0))
@@ -1002,13 +1064,21 @@ pub fn run() -> Result<()> {
                 saved.label()
             ));
         }
+        let tray_icon = match TrayIcon::small() {
+            Ok(icon) => icon,
+            Err(error) => {
+                let _ = UnregisterHotKey(hwnd, HOTKEY);
+                let _ = DestroyWindow(hwnd);
+                return Err(error);
+            }
+        };
         let mut tray = NOTIFYICONDATAW {
             cbSize: size_of::<NOTIFYICONDATAW>() as u32,
             hWnd: hwnd,
             uID: 1,
             uFlags: NIF_ICON | NIF_MESSAGE | NIF_TIP,
             uCallbackMessage: TRAY,
-            hIcon: wc.hIcon,
+            hIcon: tray_icon.0,
             ..Default::default()
         };
         update_tray_tip(&mut tray);
@@ -1048,6 +1118,7 @@ pub fn run() -> Result<()> {
                 hover: None,
                 hint: String::new(),
                 tray,
+                tray_icon,
                 taskbar_created: RegisterWindowMessageW(w!("TaskbarCreated")),
             })
         });
