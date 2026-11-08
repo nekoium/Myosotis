@@ -22,7 +22,24 @@ fn numeral_pixels_are_centered_and_padded_at_common_display_scales() -> Result<(
         for scale in [1., 1.25, 1.5, 2.] {
             let format = NumberBadge::format(&write, scale)?;
             let mut previous_width = 0.;
-            for number in [1, 4, 7, 10, 11, 20, 100, usize::MAX] {
+            // Exhaust small labels; exercise every decimal width and digit shape up to usize::MAX.
+            let mut numbers: Vec<usize> = (0..=1000).collect();
+            let mut boundary = 1000usize;
+            while let Some(next) = boundary.checked_mul(10) {
+                numbers.extend([next - 1, next, next + 1]);
+                boundary = next;
+            }
+            for digit in 1..=9usize {
+                let mut repeated = digit;
+                while let Some(next) = repeated.checked_mul(10).and_then(|n| n.checked_add(digit)) {
+                    numbers.push(next);
+                    repeated = next;
+                }
+            }
+            numbers.extend([usize::MAX - 1, usize::MAX]);
+            numbers.sort_unstable();
+            numbers.dedup();
+            for number in numbers {
                 let badge = NumberBadge::new(&write, &format, number, scale)?;
                 target.BeginDraw();
                 target.Clear(Some(&color(0.14, 0.14, 0.15, 1.)));
