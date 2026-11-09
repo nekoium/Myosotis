@@ -1,4 +1,5 @@
 mod capture;
+mod clipboard;
 #[cfg(test)]
 mod completion_tests;
 #[cfg(test)]
@@ -283,9 +284,14 @@ impl App {
             .export(&self.doc, &self.pixels, self.full)
             .and_then(|surface| surface.to_clipboard(self.hwnd));
         match result {
-            Ok(()) => {
-                eprintln!("Clipboard complete in {} ms", started.elapsed().as_millis());
+            Ok(publication) => {
+                eprintln!(
+                    "Clipboard bitmap ready in {} ms",
+                    started.elapsed().as_millis()
+                );
                 self.close_overlay();
+                clipboard::start_encoding();
+                drop(publication);
             }
             Err(error) => {
                 eprintln!("Clipboard copy failed: {error}");
@@ -958,7 +964,11 @@ impl App {
     }
 }
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if let Some(result) = clipboard::message(hwnd, msg, wparam) {
+        return result;
+    }
     if msg == WM_DESTROY {
+        clipboard::shutdown(hwnd);
         PostQuitMessage(0);
         return LRESULT(0);
     }

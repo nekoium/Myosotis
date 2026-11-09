@@ -164,6 +164,15 @@ The approved window measures 344 × 294 DIP. Keycap bounds use measured Segoe UI
 
 Native rendering is checked in memory at 100%, 125%, 150%, and 200% scaling in both themes. Live tray entry, recording, rebinding persistence, Reset, dark/light rendering, and keyboard focus descriptions were checked at 200% scale using isolated preferences. Global hotkey contention, capture foreground restoration, and multi-monitor DPI transitions still need separate qualification.
 
+### Clipboard completion
+
+For [issue #16](https://github.com/nekoium/Myosotis/issues/16), completion publishes the rendered image as CF_DIB and advertises delayed PNG before closing the overlay. The clipboard remains locked until the overlay is hidden, preventing clipboard listeners from forcing PNG encoding while the overlay is still visible. PNG encoding then runs on a worker with an owned pixel snapshot and its own COM/WIC objects. The resident window publishes the result only while it owns that clipboard item.
+
+Applications consuming bitmap data can paste immediately. An application requesting PNG before encoding finishes waits for that result through Windows delayed clipboard rendering. Copying something else discards the pending result; an old encoding job cannot overwrite newer clipboard contents. Quitting renders pending PNG while the clipboard owner window still exists, so completed output survives exit. PNG encoding failure leaves CF_DIB available. Failure to open or initially publish to the clipboard keeps the capture available for retry.
+
+This moves compression out of visible completion; it does not reduce PNG encoding time or promise immediate paste into PNG-only consumers.
+
+### Input schema transitions
 For [issue #18](https://github.com/nekoium/Myosotis/issues/18), Input schema fades in over 160 ms and out over 100 ms. Hover, keyboard focus, recording, and enabled-control colors blend over 60 ms using the selected ease-out curve, without moving or scaling the window. Shortcut actions and text update immediately. Close, Escape outside recording, and focus loss begin dismissal immediately and reject schema input during the remaining visual fade. Recording rules stay unchanged. Reopening interrupts dismissal from the current opacity; opening an already-visible schema does not replay its entrance. Starting capture cancels transitions and hides the schema synchronously before pixels are captured. Windows' client-area animation preference disables all schema transitions, and animation timers stop when idle or hidden. These timings were selected through the [browser study and approved design](docs/superpowers/specs/2026-11-08-input-schema-animation-design.md); native changes were accepted by the user for finalization. An opening flash remains reported and is tracked separately in [issue #23](https://github.com/nekoium/Myosotis/issues/23), with its root cause unconfirmed. Screenshot and annotation controls remain animation-free.
 
 ### Start at login
