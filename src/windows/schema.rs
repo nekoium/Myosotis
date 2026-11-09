@@ -1,6 +1,40 @@
 use super::*;
 use crate::input::{self, Action, Bindings, Shortcut};
 use ::windows::Win32::UI::Controls::WM_MOUSELEAVE;
+mod motion;
+use motion::Tween;
+const MOTION_TIMER: usize = 18;
+
+fn animations_enabled() -> bool {
+    let mut enabled = BOOL(0);
+    unsafe {
+        SystemParametersInfoW(
+            SPI_GETCLIENTAREAANIMATION,
+            0,
+            Some((&mut enabled as *mut BOOL).cast()),
+            SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0),
+        )
+        .is_ok()
+            && enabled.as_bool()
+    }
+}
+
+// Emphasis, recording, and enabled weights are shared by live and offscreen rendering.
+pub fn control_states(
+    bindings: &Bindings,
+    focus: Option<usize>,
+    listening: Option<usize>,
+    hover: Option<usize>,
+) -> [[f32; 3]; 12] {
+    std::array::from_fn(|index| {
+        let enabled = index != RESET || bindings != &Bindings::default();
+        [
+            f32::from(enabled && (focus == Some(index) || hover == Some(index))),
+            f32::from(listening == Some(index)),
+            f32::from(enabled),
+        ]
+    })
+}
 
 pub const APPLY: u32 = WM_APP + 2;
 pub const WIDTH: f32 = 344.;
@@ -93,6 +127,13 @@ pub struct Schema {
     pub focus: Option<usize>,
     pub listening: Option<usize>,
     pub hover: Option<usize>,
+    opacity: Tween<1>,
+    colors: [Tween<3>; 12],
+    visible: bool,
+    closing: bool,
+    animations: bool,
+    timer_running: bool,
+    last_alpha: Option<u8>,
     renderer: render::Renderer,
     scale: f32,
     window_size: (i32, i32),
@@ -116,8 +157,121 @@ impl Schema {
         }
         (0..10).find(|&index| self.key_rects[index].contains(point))
     }
+    fn drag_hit(&self, point: Point) -> u32 {
+        if self.hit(point).is_some() {
+            HTCLIENT
+        } else {
+            HTCAPTION
+        }
+    }
     unsafe fn repaint(&self) {
         let _ = InvalidateRect(self.hwnd, None, false);
+    }
+    pub fn colors(&self) -> [[f32; 3]; 12] {
+        let now = Instant::now();
+        self.colors.map(|color| color.sample(now))
+    }
+    unsafe fn sync_colors(&mut self) {
+        if !self.closing {
+            let now = Instant::now();
+            let targets = control_states(&self.bindings, self.focus, self.listening, self.hover);
+            for (color, target) in self.colors.iter_mut().zip(targets) {
+                color.retarget(target, motion::COLOR, now);
+                if !self.animations || !self.visible {
+                    color.settle();
+                }
+            }
+        }
+        self.schedule();
+    }
+    unsafe fn stop_timer(&mut self) {
+        if self.timer_running {
+            let _ = KillTimer(self.hwnd, MOTION_TIMER);
+            self.timer_running = false;
+        }
+    }
+    unsafe fn schedule(&mut self) {
+        let now = Instant::now();
+        let active = self.opacity.active(now) || self.colors.iter().any(|color| color.active(now));
+        if self.visible && self.animations && active {
+            if self.timer_running {
+                return;
+            }
+            if SetTimer(self.hwnd, MOTION_TIMER, 16, None) != 0 {
+                self.timer_running = true;
+                return;
+            }
+            // A failed timer must never leave a transparent or undismissable window.
+            self.opacity.settle();
+            self.colors.iter_mut().for_each(Tween::settle);
+        }
+        self.stop_timer();
+        self.apply_opacity();
+    }
+    unsafe fn apply_opacity(&mut self) {
+        let alpha = (self.opacity.sample(Instant::now())[0] * 255.).round() as u8;
+        if self.last_alpha != Some(alpha) {
+            let style = GetWindowLongW(self.hwnd, GWL_EXSTYLE) as u32;
+            if style & WS_EX_LAYERED.0 != 0 {
+                match SetLayeredWindowAttributes(self.hwnd, COLORREF(0), alpha, LWA_ALPHA) {
+                    Ok(()) => self.last_alpha = Some(alpha),
+                    Err(error) => {
+                        eprintln!("Input schema opacity failed: {error}");
+                        // Fall back to an ordinary opaque window if layered rendering is unavailable.
+                        SetWindowLongW(self.hwnd, GWL_EXSTYLE, (style & !WS_EX_LAYERED.0) as i32);
+                        self.animations = false;
+                        self.opacity.settle();
+                        self.colors.iter_mut().for_each(Tween::settle);
+                        self.stop_timer();
+                    }
+                }
+            }
+        }
+        if self.closing && !self.opacity.active(Instant::now()) {
+            self.hide();
+        }
+    }
+    unsafe fn prepare_show(&mut self) -> bool {
+        let entering = !self.visible || self.closing;
+        self.animations = animations_enabled()
+            && GetWindowLongW(self.hwnd, GWL_EXSTYLE) as u32 & WS_EX_LAYERED.0 != 0;
+        // Hold the displayed opacity until the first visible frame has been presented.
+        if entering {
+            self.stop_timer();
+            self.opacity = Tween::new(self.opacity.sample(Instant::now()), Instant::now());
+        }
+        self.visible = true;
+        self.closing = false;
+        self.apply_opacity();
+        entering
+    }
+    unsafe fn finish_show(&mut self, entering: bool) -> Result<()> {
+        // HWND targets present to the associated window; paint after showing it at held opacity.
+        // Start the fade clock after rendering so cold-start work cannot consume its first frames.
+        self.renderer.paint_schema(self)?;
+        if entering {
+            self.opacity.retarget([1.], motion::OPEN, Instant::now());
+        }
+        if !self.animations {
+            self.opacity.settle();
+        }
+        self.sync_colors();
+        self.apply_opacity();
+        Ok(())
+    }
+    unsafe fn dismiss(&mut self) {
+        if self.closing {
+            return;
+        }
+        self.cancel();
+        self.focus = None;
+        self.hover = None;
+        self.closing = true;
+        self.opacity.retarget([0.], motion::CLOSE, Instant::now());
+        if !self.animations {
+            self.opacity.settle();
+        }
+        self.schedule();
     }
     unsafe fn cancel(&mut self) {
         self.listening = None;
@@ -127,6 +281,12 @@ impl Schema {
         self.cancel();
         self.focus = None;
         self.hover = None;
+        self.visible = false;
+        self.closing = false;
+        self.opacity = Tween::new([0.], Instant::now());
+        self.colors = control_states(&self.bindings, None, None, None)
+            .map(|state| Tween::new(state, Instant::now()));
+        self.stop_timer();
         let _ = ShowWindow(self.hwnd, SW_HIDE);
     }
     unsafe fn request(&mut self, bindings: Bindings) {
@@ -143,7 +303,7 @@ impl Schema {
         self.cancel();
         self.focus = Some(index);
         match index {
-            CLOSE => self.hide(),
+            CLOSE => self.dismiss(),
             RESET if self.bindings != Bindings::default() => self.request(Bindings::default()),
             RESET => {}
             _ => {
@@ -161,11 +321,6 @@ impl Schema {
             return;
         }
         if let Some(index) = self.listening {
-            if key == 0x1b {
-                self.cancel();
-                self.repaint();
-                return;
-            }
             if key == 0x09 {
                 self.cancel();
             } else {
@@ -233,7 +388,7 @@ impl Schema {
                     self.activate(index)
                 }
             }
-            0x1b => self.hide(),
+            0x1b => self.dismiss(),
             _ => {}
         }
         self.repaint();
@@ -276,7 +431,37 @@ impl Schema {
         }
     }
     unsafe fn message(&mut self, msg: u32, wparam: WPARAM, lparam: LPARAM) -> Option<LRESULT> {
+        if self.closing
+            && matches!(
+                msg,
+                WM_LBUTTONDOWN
+                    | WM_NCLBUTTONDOWN
+                    | WM_MOUSEMOVE
+                    | WM_MOUSELEAVE
+                    | WM_KEYDOWN
+                    | WM_SYSKEYDOWN
+                    | WM_KEYUP
+                    | WM_SYSKEYUP
+            )
+        {
+            return Some(LRESULT(0));
+        }
         match msg {
+            WM_NCHITTEST if self.closing => return Some(LRESULT(HTTRANSPARENT as isize)),
+            WM_MOUSEACTIVATE if self.closing => return Some(LRESULT(MA_NOACTIVATEANDEAT as isize)),
+            WM_TIMER if wparam.0 == MOTION_TIMER => {
+                self.apply_opacity();
+                self.repaint();
+            }
+            WM_SETTINGCHANGE => {
+                self.animations = animations_enabled()
+                    && GetWindowLongW(self.hwnd, GWL_EXSTYLE) as u32 & WS_EX_LAYERED.0 != 0;
+                if !self.animations {
+                    self.opacity.settle();
+                    self.colors.iter_mut().for_each(Tween::settle);
+                }
+                self.repaint();
+            }
             WM_PAINT => {
                 let mut ps = PAINTSTRUCT::default();
                 BeginPaint(self.hwnd, &mut ps);
@@ -294,10 +479,7 @@ impl Schema {
                 };
                 let _ = ScreenToClient(self.hwnd, &mut p);
                 let point = Point::new(p.x as f32 / self.scale, p.y as f32 / self.scale);
-                if point.y < 42. && self.hit(point).is_none() {
-                    return Some(LRESULT(HTCAPTION as isize));
-                }
-                return Some(LRESULT(HTCLIENT as isize));
+                return Some(LRESULT(self.drag_hit(point) as isize));
             }
             WM_SETCURSOR => {
                 let clickable = self
@@ -328,6 +510,15 @@ impl Schema {
                 self.hover = None;
                 self.repaint();
             }
+            WM_NCLBUTTONDOWN if wparam.0 == HTCAPTION as usize => {
+                self.cancel();
+                self.focus = None;
+                self.hover = None;
+                self.sync_colors();
+                self.repaint();
+                // Let Win32 run its native move loop after releasing WINDOW's mutable borrow.
+                return None;
+            }
             WM_LBUTTONDOWN => {
                 let _ = SetFocus(self.hwnd);
                 if let Some(index) = self.hit(point_in(lparam, self.scale)) {
@@ -341,16 +532,12 @@ impl Schema {
             WM_SYSKEYDOWN
                 if self.listening.is_none() && wparam.0 == 0x73 && GetKeyState(0x12) < 0 =>
             {
-                self.hide()
+                self.dismiss()
             }
             WM_KEYDOWN | WM_SYSKEYDOWN => self.key(wparam.0 as u16, lparam.0 & (1 << 30) != 0),
             WM_KEYUP | WM_SYSKEYUP => self.blocked.retain(|&key| key != wparam.0 as u16),
-            WM_KILLFOCUS => {
-                self.cancel();
-                self.focus = None;
-                self.repaint();
-            }
-            WM_CLOSE => self.hide(),
+            WM_KILLFOCUS => self.dismiss(),
+            WM_CLOSE => self.dismiss(),
             WM_DPICHANGED => {
                 self.scale = (wparam.0 & 0xffff) as f32 / 96.;
                 let r = &*(lparam.0 as *const RECT);
@@ -372,6 +559,7 @@ impl Schema {
             }
             _ => return None,
         }
+        self.sync_colors();
         Some(LRESULT(0))
     }
 }
@@ -397,25 +585,43 @@ unsafe fn new_renderer(hwnd: HWND, scale: f32, theme: Theme) -> Result<render::R
         theme,
     )
 }
+unsafe fn show_window(hwnd: HWND) -> Result<()> {
+    let entering = WINDOW.with(|w| w.borrow_mut().as_mut().unwrap().prepare_show());
+    // ShowWindow can synchronously send WM_PAINT. Keep WINDOW available to wndproc.
+    let _ = ShowWindow(hwnd, SW_SHOWNORMAL);
+    let result = WINDOW.with(|w| w.borrow_mut().as_mut().unwrap().finish_show(entering));
+    if result.is_err() {
+        hide();
+    }
+    result?;
+    let _ = SetForegroundWindow(hwnd);
+    let _ = SetFocus(hwnd);
+    Ok(())
+}
+pub fn visible() -> bool {
+    WINDOW.with(|w| w.borrow().as_ref().is_some_and(|w| w.visible))
+}
+pub unsafe fn dismiss() {
+    WINDOW.with(|w| {
+        if let Some(window) = w.borrow_mut().as_mut() {
+            window.dismiss();
+        }
+    });
+}
 pub unsafe fn open(owner: HWND, theme: Theme, bindings: &Bindings) -> Result<()> {
-    if WINDOW.with(|w| {
+    let existing = WINDOW.with(|w| {
         let mut window = w.borrow_mut();
-        if let Some(window) = window.as_mut() {
+        window.as_mut().map(|window| {
             window.bindings = bindings.clone();
             window.theme = theme;
             window.renderer.theme = theme;
             window.refresh_keys();
             window.resize();
-            let _ = ShowWindow(window.hwnd, SW_SHOWNORMAL);
-            let _ = SetForegroundWindow(window.hwnd);
-            let _ = SetFocus(window.hwnd);
-            window.repaint();
-            true
-        } else {
-            false
-        }
-    }) {
-        return Ok(());
+            window.hwnd
+        })
+    });
+    if let Some(hwnd) = existing {
+        return show_window(hwnd);
     }
     let instance = GetModuleHandleW(None)?;
     let _ = RegisterClassW(&WNDCLASSW {
@@ -442,7 +648,7 @@ pub unsafe fn open(owner: HWND, theme: Theme, bindings: &Bindings) -> Result<()>
     let width = (WIDTH * scale).round() as i32;
     let height = (HEIGHT * scale).round() as i32;
     let hwnd = CreateWindowExW(
-        WINDOW_EX_STYLE::default(),
+        WS_EX_TOOLWINDOW | WS_EX_LAYERED,
         CLASS,
         w!("Myosotis — Input schema"),
         WS_POPUP | WS_SYSMENU,
@@ -468,6 +674,14 @@ pub unsafe fn open(owner: HWND, theme: Theme, bindings: &Bindings) -> Result<()>
             focus: None,
             listening: None,
             hover: None,
+            opacity: Tween::new([0.], Instant::now()),
+            colors: control_states(bindings, None, None, None)
+                .map(|state| Tween::new(state, Instant::now())),
+            visible: false,
+            closing: false,
+            animations: animations_enabled(),
+            timer_running: false,
+            last_alpha: None,
             renderer,
             scale,
             window_size: (0, 0),
@@ -484,15 +698,9 @@ pub unsafe fn open(owner: HWND, theme: Theme, bindings: &Bindings) -> Result<()>
     };
     WINDOW.with(|w| *w.borrow_mut() = Some(window));
     WINDOW.with(|w| {
-        let mut window = w.borrow_mut();
-        let window = window.as_mut().unwrap();
-        window.resize();
-        let _ = ShowWindow(hwnd, SW_SHOW);
-        let _ = SetForegroundWindow(hwnd);
-        let _ = SetFocus(hwnd);
-        window.repaint();
+        w.borrow_mut().as_mut().unwrap().resize();
     });
-    Ok(())
+    show_window(hwnd)
 }
 pub fn recording() -> bool {
     WINDOW.with(|w| w.borrow().as_ref().is_some_and(|w| w.listening.is_some()))
@@ -512,6 +720,7 @@ pub unsafe fn update(theme: Theme, bindings: &Bindings) {
             w.bindings = bindings.clone();
             w.refresh_keys();
             w.resize();
+            w.sync_colors();
             w.repaint();
         }
     });
@@ -521,7 +730,8 @@ pub fn take_request() -> Option<Bindings> {
 }
 pub unsafe fn close() {
     WINDOW.with(|w| {
-        if let Some(w) = w.borrow_mut().take() {
+        if let Some(mut w) = w.borrow_mut().take() {
+            w.hide();
             let _ = DestroyWindow(w.hwnd);
         }
     });
@@ -530,8 +740,157 @@ pub unsafe fn close() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
-    fn recording_cancels_on_escape_or_focus_loss_and_reset_requests_only_defaults() -> Result<()> {
+    fn animated_dismissal_blocks_input_and_capture_hide_cancels_motion_offscreen() -> Result<()> {
+        unsafe {
+            let hwnd = CreateWindowExW(
+                WS_EX_LAYERED | WS_EX_TOOLWINDOW,
+                w!("STATIC"),
+                w!("Schema motion test"),
+                WS_POPUP,
+                0,
+                0,
+                WIDTH as i32,
+                HEIGHT as i32,
+                None,
+                None,
+                None,
+                None,
+            )?;
+            let result = (|| -> Result<()> {
+                let bindings = Bindings::default();
+                let renderer = new_renderer(hwnd, 1., Theme::Light)?;
+                let now = Instant::now();
+                let mut window = Schema {
+                    hwnd,
+                    owner: hwnd,
+                    key_rects: renderer.schema_keys(&bindings)?,
+                    renderer,
+                    colors: control_states(&bindings, Some(1), Some(1), Some(1))
+                        .map(|value| Tween::new(value, now)),
+                    bindings,
+                    theme: Theme::Light,
+                    focus: Some(1),
+                    listening: Some(1),
+                    hover: Some(1),
+                    opacity: Tween::new([1.], now),
+                    visible: true,
+                    closing: false,
+                    animations: true,
+                    timer_running: false,
+                    last_alpha: None,
+                    scale: 1.,
+                    window_size: (0, 0),
+                    pending: None,
+                    blocked: vec![b'W' as u16],
+                };
+                // Logical visibility exercises lifecycle without ever showing the test HWND.
+                assert!(!IsWindowVisible(hwnd).as_bool());
+                window.renderer.paint_schema(&window)?;
+                window.dismiss();
+                assert!(window.closing && window.timer_running);
+                assert!(
+                    window.listening.is_none()
+                        && window.focus.is_none()
+                        && window.blocked.is_empty()
+                );
+                window.message(WM_KEYDOWN, WPARAM(0x09), LPARAM(0));
+                window.message(WM_LBUTTONDOWN, WPARAM(0), LPARAM((160 << 16) | 40));
+                assert!(window.focus.is_none() && window.listening.is_none());
+                assert_eq!(
+                    window.message(WM_MOUSEACTIVATE, WPARAM(0), LPARAM(0)),
+                    Some(LRESULT(MA_NOACTIVATEANDEAT as isize))
+                );
+                assert_eq!(
+                    window.message(WM_NCHITTEST, WPARAM(0), LPARAM(0)),
+                    Some(LRESULT(HTTRANSPARENT as isize))
+                );
+                window.hide();
+                assert!(!window.visible && !window.closing && !window.timer_running);
+                assert_eq!(window.opacity.sample(Instant::now()), [0.]);
+                assert!(!window.opacity.active(Instant::now()));
+                assert!(window
+                    .colors
+                    .iter()
+                    .all(|color| !color.active(Instant::now())));
+                window.message(WM_TIMER, WPARAM(MOTION_TIMER), LPARAM(0));
+                assert!(
+                    !IsWindowVisible(hwnd).as_bool(),
+                    "queued timer cannot revive capture-hidden schema"
+                );
+                let entering = window.prepare_show();
+                assert!(entering);
+                window.animations = true;
+                assert_eq!(
+                    window
+                        .opacity
+                        .sample(Instant::now() + Duration::from_secs(1)),
+                    [0.],
+                    "preparing/rendering cannot advance entrance opacity"
+                );
+                window.finish_show(entering)?;
+                assert!(window.opacity.active(Instant::now()));
+                let started = window.opacity.sample(Instant::now());
+                let entering = window.prepare_show();
+                assert!(
+                    !entering,
+                    "already visible window must not restart entrance"
+                );
+                assert!(window.opacity.sample(Instant::now())[0] >= started[0]);
+                window.hide();
+                for point in [
+                    Point::new(10., 20.),
+                    Point::new(150., 95.),
+                    Point::new(10., 180.),
+                    Point::new(330., 285.),
+                ] {
+                    assert_eq!(window.drag_hit(point), HTCAPTION);
+                }
+                for bounds in window
+                    .key_rects
+                    .iter()
+                    .copied()
+                    .chain([reset_rect(), close_rect()])
+                {
+                    assert_eq!(
+                        window.drag_hit(Point::new(
+                            (bounds.left + bounds.right) / 2.,
+                            (bounds.top + bounds.bottom) / 2.
+                        )),
+                        HTCLIENT
+                    );
+                }
+                window.listening = Some(1);
+                window.focus = Some(1);
+                window.message(WM_NCLBUTTONDOWN, WPARAM(HTCAPTION as usize), LPARAM(0));
+                assert!(window.listening.is_none() && window.focus.is_none());
+                window.visible = true;
+                window.closing = true;
+                window.opacity = Tween::new([0.], now);
+                window.message(WM_TIMER, WPARAM(MOTION_TIMER), LPARAM(0));
+                assert!(
+                    !window.visible && !window.timer_running,
+                    "completed dismissal stops its timer"
+                );
+                window.visible = true;
+                window.opacity = Tween::new([1.], now);
+                window.animations = false;
+                window.dismiss();
+                assert!(
+                    !window.visible && !window.closing,
+                    "reduced motion dismisses synchronously"
+                );
+                window.hide();
+                Ok(())
+            })();
+            let _ = DestroyWindow(hwnd);
+            result
+        }
+    }
+
+    #[test]
+    fn dismissal_clears_recording_and_focus_and_reset_requests_only_defaults() -> Result<()> {
         unsafe {
             let hwnd = CreateWindowExW(
                 WINDOW_EX_STYLE::default(),
@@ -561,7 +920,15 @@ mod tests {
                     theme: Theme::Light,
                     focus: Some(1),
                     listening: Some(1),
-                    hover: None,
+                    hover: Some(1),
+                    opacity: Tween::new([0.], Instant::now()),
+                    colors: control_states(&bindings, Some(1), Some(1), Some(1))
+                        .map(|state| Tween::new(state, Instant::now())),
+                    visible: false,
+                    closing: false,
+                    animations: false,
+                    timer_running: false,
+                    last_alpha: None,
                     scale: 1.,
                     window_size: (0, 0),
                     pending: None,
@@ -579,14 +946,43 @@ mod tests {
                 assert_eq!(window.window_size, original_size);
                 assert!(IsWindow(hwnd).as_bool());
                 window.key(0x1b, false);
+                assert_eq!(
+                    window.listening,
+                    Some(1),
+                    "duplicate Escape keeps recording"
+                );
+                assert_eq!(window.focus, Some(1));
+                assert_eq!(window.hover, Some(1));
+                assert!(window.pending.is_none());
+
+                window.bindings.set(Action::Cancel, b'F' as u16).unwrap();
+                window.listening = Some(Action::Cancel as usize + 1);
+                window.key(0x1b, false);
                 assert_eq!(window.listening, None);
                 assert!(window.blocked.is_empty());
-                assert_eq!(window.bindings, bindings);
+                assert_eq!(window.focus, Some(1), "recording Escape must not hide");
+                assert_eq!(window.hover, Some(1));
+                assert_eq!(window.pending.take(), Some(bindings.clone()));
+                window.bindings = bindings.clone();
+                window.focus = Some(0);
+                window.hover = Some(0);
+                window.blocked.push(b'W' as u16);
                 window.listening = Some(0);
                 window.message(WM_KILLFOCUS, WPARAM(0), LPARAM(0));
                 assert_eq!(window.listening, None);
                 assert_eq!(window.focus, None);
+                assert_eq!(window.hover, None);
+                assert!(window.blocked.is_empty());
                 assert!(window.pending.is_none());
+                window.focus = Some(CLOSE);
+                window.hover = Some(CLOSE);
+                window.key(0x1b, false);
+                assert_eq!(window.focus, None);
+                assert_eq!(window.hover, None);
+                assert!(
+                    IsWindow(hwnd).as_bool(),
+                    "dismissal keeps the reusable window"
+                );
                 window.activate(RESET);
                 assert_eq!(window.pending, Some(Bindings::default()));
                 assert_eq!(

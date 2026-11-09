@@ -22,8 +22,14 @@ Petal colors in drawing order are `#648DF0`, `#7EA3F8`, `#6B95F2`, `#86AAF7`, an
 
 ## Generated assets
 
-- `assets/myosotis.ico`: transparent PNG frames at 16, 32, 48, and 256 pixels, embedded by the existing Windows resource build.
+- `assets/myosotis.ico`: transparent PNG frames at 16, 20, 24, 32, 40, 48, 64, 96, 128, and 256 pixels, embedded by the existing Windows resource build. Native intermediate sizes reduce shell resampling at common display scales; every frame uses the same approved artwork.
 - `assets/myosotis.svg`: the same paths, transforms, and palette as vector artwork for the README.
 - `assets/myosotis.png`: the same 256-pixel frame for raster uses.
+
+## Windows loading
+
+Desktop and Explorer shortcuts select from the executable's embedded ICO. The resident tray loads a separate icon at Windows' small-icon width and height at the primary taskbar's DPI (falling back to system DPI while Explorer is unavailable), rather than scaling the shared large window-class icon. It refreshes that icon after display/settings changes and Explorer restart. Each separately loaded icon is destroyed after replacement or shutdown; shared class icons remain owned by Windows. A failed refresh retains the existing icon.
+
+The flower geometry, palette, and proportions remain unchanged for every surface. No alternate tray artwork is used. See the [approved sizing/loading decision for issue #11](https://github.com/nekoium/Myosotis/issues/11#issuecomment-6719389896).
 
 Regenerate all three assets with the icon command in [CONTRIBUTING.md](../CONTRIBUTING.md). Keep them synchronized with the generator. The README displays the SVG beside its heading using GitHub's supported `align="absmiddle"` attribute to avoid baseline alignment. GitHub's own repository-name header does not support a custom repository icon.

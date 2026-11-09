@@ -68,9 +68,22 @@ impl NumberBadge {
         let right = width + bounds.right;
         let bottom = height + bounds.bottom;
         let radius = 12. * scale;
+        // Optical corrections for Segoe UI Semibold's asymmetric single-digit ink weight.
+        let optical = match number {
+            1 => Point::new(-0.5, 0.25),
+            2 => Point::new(0., -0.25),
+            3 => Point::new(-0.25, 0.),
+            4 => Point::new(-0.25, -0.25),
+            5 | 9 => Point::new(0., 0.25),
+            7 => Point::new(0., 1.),
+            _ => Point::default(),
+        };
         Ok(Self {
             layout,
-            offset: Point::new(-(left + right) / 2., -(top + bottom) / 2.),
+            offset: Point::new(
+                -(left + right) / 2. + optical.x * scale,
+                -(top + bottom) / 2. + optical.y * scale,
+            ),
             half_width: radius.max((right - left) / 2. + 8. * scale),
             radius,
         })
@@ -718,14 +731,14 @@ impl Renderer {
         Ok(keys)
     }
     pub unsafe fn paint_schema(&self, window: &super::schema::Schema) -> Result<()> {
-        self.paint_schema_on(
+        self.paint_schema_frame(
             &self.target.cast()?,
             &window.bindings,
-            window.focus,
             window.listening,
-            window.hover,
+            &window.colors(),
         )
     }
+    #[cfg(test)]
     unsafe fn paint_schema_on(
         &self,
         target: &ID2D1RenderTarget,
@@ -733,6 +746,20 @@ impl Renderer {
         focus: Option<usize>,
         listening: Option<usize>,
         hover: Option<usize>,
+    ) -> Result<()> {
+        self.paint_schema_frame(
+            target,
+            bindings,
+            listening,
+            &super::schema::control_states(bindings, focus, listening, hover),
+        )
+    }
+    unsafe fn paint_schema_frame(
+        &self,
+        target: &ID2D1RenderTarget,
+        bindings: &crate::input::Bindings,
+        listening: Option<usize>,
+        controls: &[[f32; 3]; 12],
     ) -> Result<()> {
         use super::schema::{self, WIDTH};
         let (surface, foreground, key, selected, muted) = match self.theme {
@@ -752,7 +779,14 @@ impl Renderer {
             ),
         };
         let fg = target.CreateSolidColorBrush(&foreground, None)?;
-        let muted = target.CreateSolidColorBrush(&muted, None)?;
+        let blend = |a: D2D1_COLOR_F, b: D2D1_COLOR_F, t: f32| {
+            color(
+                a.r + (b.r - a.r) * t,
+                a.g + (b.g - a.g) * t,
+                a.b + (b.b - a.b) * t,
+                a.a + (b.a - a.a) * t,
+            )
+        };
         let key_brush = target.CreateSolidColorBrush(&key, None)?;
         let selected_brush = target.CreateSolidColorBrush(&selected, None)?;
         let accent = target.CreateSolidColorBrush(&INTERFACE_ACCENT, None)?;
@@ -773,18 +807,6 @@ impl Renderer {
                     radiusY: radius * self.scale,
                 },
                 brush,
-            )
-        };
-        let outline = |r: Rect| {
-            target.DrawRoundedRectangle(
-                &D2D1_ROUNDED_RECT {
-                    rect: scaled(r),
-                    radiusX: 4. * self.scale,
-                    radiusY: 4. * self.scale,
-                },
-                &accent,
-                self.scale,
-                None,
             )
         };
         let text =
@@ -831,10 +853,10 @@ impl Renderer {
         text(
             "Input schema",
             Rect {
-                left: 39.,
-                top: 6.,
+                left: 40.,
+                top: 10.,
                 right: 200.,
-                bottom: 36.,
+                bottom: 40.,
             },
             &fg,
             false,
@@ -850,8 +872,8 @@ impl Renderer {
             let angle = (degrees as f32).to_radians();
             let p = |x: f32, y: f32| {
                 point(Point::new(
-                    (22. + (x * angle.cos() - y * angle.sin()) * 1.16 * 14. / 256.) * self.scale,
-                    (21. + (x * angle.sin() + y * angle.cos()) * 1.16 * 14. / 256.) * self.scale,
+                    (22. + (x * angle.cos() - y * angle.sin()) * 1.16 * 18. / 256.) * self.scale,
+                    (25. + (x * angle.sin() + y * angle.cos()) * 1.16 * 18. / 256.) * self.scale,
                 ))
             };
             let petal = self.factory.CreatePathGeometry()?;
@@ -880,20 +902,18 @@ impl Renderer {
             target.CreateSolidColorBrush(&color(245. / 255., 200. / 255., 92. / 255., 1.), None)?;
         target.FillEllipse(
             &D2D1_ELLIPSE {
-                point: point(Point::new(22. * self.scale, 21. * self.scale)),
-                radiusX: 23. * 1.16 * 14. / 256. * self.scale,
-                radiusY: 23. * 1.16 * 14. / 256. * self.scale,
+                point: point(Point::new(22. * self.scale, 25. * self.scale)),
+                radiusX: 23. * 1.16 * 18. / 256. * self.scale,
+                radiusY: 23. * 1.16 * 18. / 256. * self.scale,
             },
             &center,
         );
         for (index, r) in [(10, schema::reset_rect()), (11, schema::close_rect())] {
-            let enabled = index == 11 || bindings != &crate::input::Bindings::default();
-            if enabled && hover == Some(index) {
-                fill(r, &key_brush, 4.);
-            }
-            if enabled && focus == Some(index) {
-                outline(r);
-            }
+            let [emphasis, _, enabled] = controls[index];
+            let background = target.CreateSolidColorBrush(&blend(surface, key, emphasis), None)?;
+            let foreground =
+                target.CreateSolidColorBrush(&blend(muted, foreground, enabled), None)?;
+            fill(r, &background, 4.);
             let r = Rect {
                 left: r.left * self.scale,
                 top: r.top * self.scale,
@@ -904,11 +924,7 @@ impl Renderer {
                 target,
                 if index == 10 { 10 } else { 5 },
                 r,
-                if enabled && (index != 11 || hover == Some(index)) {
-                    &fg
-                } else {
-                    &muted
-                },
+                &foreground,
                 14.,
             )?;
         }
@@ -941,35 +957,17 @@ impl Renderer {
                 bindings.label(crate::input::Action::ALL[index - 1])
             };
             let r = key_rect;
-            fill(
-                r,
-                if listening == Some(index) {
-                    &accent
-                } else if hover == Some(index) {
-                    &selected_brush
-                } else {
-                    &key_brush
-                },
-                4.,
-            );
-            if focus == Some(index) && listening != Some(index) {
-                outline(Rect {
-                    left: r.left - 2.,
-                    top: r.top - 2.,
-                    right: r.right + 2.,
-                    bottom: r.bottom + 2.,
-                });
-            }
-            text(
-                &value,
-                r,
-                if listening == Some(index) {
-                    &white
-                } else {
-                    &fg
-                },
-                true,
+            let [emphasis, recording, _] = controls[index];
+            let background = target.CreateSolidColorBrush(
+                &blend(blend(key, selected, emphasis), INTERFACE_ACCENT, recording),
+                None,
             )?;
+            let foreground = target.CreateSolidColorBrush(
+                &blend(foreground, color(1., 1., 1., 1.), recording),
+                None,
+            )?;
+            fill(r, &background, 4.);
+            text(&value, r, &foreground, true)?;
         }
         for y in [94., 192.] {
             target.DrawLine(

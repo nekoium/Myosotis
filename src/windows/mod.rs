@@ -3,6 +3,8 @@ mod clipboard;
 #[cfg(test)]
 mod completion_tests;
 #[cfg(test)]
+mod icon_tests;
+#[cfg(test)]
 mod input_tests;
 mod render;
 mod schema;
@@ -57,13 +59,47 @@ impl Click {
 
 const TRAY: u32 = WM_APP + 1;
 const HOTKEY: i32 = 0x4D59;
-const CAPTURE: usize = 1;
+const DARK_THEME: usize = 3;
 const QUIT: usize = 2;
-const THEME_DARK: usize = 3;
-const THEME_LIGHT: usize = 4;
 const START_AT_LOGIN: usize = 5;
 const INPUT_SCHEMA: usize = 6;
 const HOTKEY_ALTERNATE: i32 = HOTKEY + 1;
+
+#[derive(Default)]
+struct TrayIcon(HICON);
+impl TrayIcon {
+    unsafe fn load(width: i32, height: i32) -> Result<Self> {
+        let handle = LoadImageW(
+            GetModuleHandleW(None)?,
+            PCWSTR(std::ptr::without_provenance(1)),
+            IMAGE_ICON,
+            width,
+            height,
+            LR_DEFAULTCOLOR,
+        )?;
+        Ok(Self(HICON(handle.0)))
+    }
+
+    unsafe fn small() -> Result<Self> {
+        let taskbar = FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()).unwrap_or_default();
+        let dpi = GetDpiForWindow(taskbar);
+        let dpi = if dpi == 0 { GetDpiForSystem() } else { dpi };
+        Self::load(
+            GetSystemMetricsForDpi(SM_CXSMICON, dpi),
+            GetSystemMetricsForDpi(SM_CYSMICON, dpi),
+        )
+    }
+}
+impl Drop for TrayIcon {
+    fn drop(&mut self) {
+        if !self.0.is_invalid() {
+            unsafe {
+                let _ = DestroyIcon(self.0);
+            }
+        }
+    }
+}
+
 struct InputHints {
     toolbar: [String; 6],
     workflow: String,
@@ -117,9 +153,30 @@ struct App {
     hover: Option<(u8, Instant)>,
     hint: String,
     tray: NOTIFYICONDATAW,
+    tray_icon: TrayIcon,
     taskbar_created: u32,
+    schema_tray_close: Option<bool>,
 }
 impl App {
+    unsafe fn refresh_tray_icon(&mut self, message: NOTIFY_ICON_MESSAGE) {
+        match TrayIcon::small() {
+            Ok(icon) => {
+                let mut tray = self.tray;
+                tray.hIcon = icon.0;
+                if Shell_NotifyIconW(message, &tray).as_bool() {
+                    self.tray = tray;
+                    self.tray_icon = icon;
+                    return;
+                }
+                eprintln!("Could not refresh the Myosotis tray icon");
+            }
+            Err(error) => eprintln!("Could not load the Myosotis tray icon: {error}"),
+        }
+        if message == NIM_ADD {
+            let _ = Shell_NotifyIconW(NIM_ADD, &self.tray);
+        }
+    }
+
     unsafe fn activate(&mut self) -> Result<()> {
         if self.visible {
             return Ok(());
@@ -616,8 +673,6 @@ impl App {
         }
         self.bindings = bindings;
         self.input_hints = InputHints::new(&self.bindings);
-        update_tray_tip(&mut self.tray, &self.bindings);
-        let _ = Shell_NotifyIconW(NIM_MODIFY, &self.tray);
         self.repaint();
         Ok(())
     }
@@ -639,31 +694,14 @@ impl App {
     }
     unsafe fn tray_menu(&mut self) {
         if let Ok(menu) = CreatePopupMenu() {
-            let capture_label = HSTRING::from(format!(
-                "Capture / blank canvas    {}",
-                self.bindings.capture.label()
-            ));
-            let _ = AppendMenuW(menu, MF_STRING, CAPTURE, &capture_label);
             let _ = AppendMenuW(menu, MF_STRING, INPUT_SCHEMA, w!("Input schema"));
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-            if let Ok(themes) = CreatePopupMenu() {
-                let _ = AppendMenuW(themes, MF_STRING, THEME_DARK, w!("Dark"));
-                let _ = AppendMenuW(themes, MF_STRING, THEME_LIGHT, w!("Light"));
-                let selected = match self.theme {
-                    Theme::Dark => THEME_DARK,
-                    Theme::Light => THEME_LIGHT,
-                };
-                let _ = CheckMenuRadioItem(
-                    themes,
-                    THEME_DARK as u32,
-                    THEME_LIGHT as u32,
-                    selected as u32,
-                    MF_BYCOMMAND.0,
-                );
-                if AppendMenuW(menu, MF_POPUP, themes.0 as usize, w!("Theme")).is_err() {
-                    let _ = DestroyMenu(themes);
-                }
-            }
+            let theme_flags = if self.theme == Theme::Dark {
+                MF_STRING | MF_CHECKED
+            } else {
+                MF_STRING
+            };
+            let _ = AppendMenuW(menu, theme_flags, DARK_THEME, w!("Dark Theme"));
             let startup_state = startup::enabled();
             let (startup_flags, startup_label) = match &startup_state {
                 Ok(true) if startup::disabled_in_windows() => (
@@ -679,7 +717,7 @@ impl App {
             };
             let _ = AppendMenuW(menu, startup_flags, START_AT_LOGIN, startup_label);
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
-            let _ = AppendMenuW(menu, MF_STRING, QUIT, w!("Quit Myosotis"));
+            let _ = AppendMenuW(menu, MF_STRING, QUIT, w!("Quit"));
             let mut p = POINT::default();
             let _ = GetCursorPos(&mut p);
             let _ = SetForegroundWindow(self.hwnd);
@@ -696,18 +734,16 @@ impl App {
             let _ = DestroyMenu(menu);
             let _ = PostMessageW(self.hwnd, WM_NULL, WPARAM(0), LPARAM(0));
             match action {
-                CAPTURE => {
-                    if let Err(e) = self.activate() {
-                        show_error(&e.to_string());
-                    }
-                }
                 INPUT_SCHEMA => {
                     if let Err(error) = schema::open(self.hwnd, self.theme, &self.bindings) {
                         show_error(&format!("Could not open Input schema.\n\n{error}"));
                     }
                 }
-                THEME_DARK => self.change_theme(Theme::Dark),
-                THEME_LIGHT => self.change_theme(Theme::Light),
+                DARK_THEME => self.change_theme(if self.theme == Theme::Dark {
+                    Theme::Light
+                } else {
+                    Theme::Dark
+                }),
                 START_AT_LOGIN => {
                     // Recheck after the menu closes in case another process changed the entry.
                     if let Err(error) =
@@ -891,7 +927,13 @@ impl App {
                 let _ = ReleaseCapture();
                 self.repaint();
             }
-            WM_DISPLAYCHANGE if self.visible => self.close_overlay(),
+            WM_DISPLAYCHANGE => {
+                if self.visible {
+                    self.close_overlay();
+                }
+                self.refresh_tray_icon(NIM_MODIFY);
+            }
+            WM_SETTINGCHANGE => self.refresh_tray_icon(NIM_MODIFY),
             WM_CLOSE => {
                 if self.visible {
                     self.close_overlay();
@@ -900,17 +942,22 @@ impl App {
                 }
             }
             TRAY => match lparam.0 as u32 {
+                WM_LBUTTONDOWN => self.schema_tray_close = Some(schema::visible()),
                 WM_LBUTTONUP => {
-                    if let Err(error) = schema::open(self.hwnd, self.theme, &self.bindings) {
+                    let close = self
+                        .schema_tray_close
+                        .take()
+                        .unwrap_or_else(schema::visible);
+                    if close {
+                        schema::dismiss();
+                    } else if let Err(error) = schema::open(self.hwnd, self.theme, &self.bindings) {
                         show_error(&format!("Could not open Input schema.\n\n{error}"));
                     }
                 }
                 WM_RBUTTONUP | WM_CONTEXTMENU => self.tray_menu(),
                 _ => {}
             },
-            _ if msg == self.taskbar_created => {
-                let _ = Shell_NotifyIconW(NIM_ADD, &self.tray);
-            }
+            _ if msg == self.taskbar_created => self.refresh_tray_icon(NIM_ADD),
             _ => return None,
         }
         Some(LRESULT(0))
@@ -934,12 +981,9 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     result.unwrap_or_else(|| DefWindowProcW(hwnd, msg, wparam, lparam))
 }
 
-fn update_tray_tip(tray: &mut NOTIFYICONDATAW, bindings: &Bindings) {
+fn update_tray_tip(tray: &mut NOTIFYICONDATAW) {
     tray.szTip.fill(0);
-    let tip = format!(
-        "Myosotis · {} · Right-click for options",
-        bindings.capture.label()
-    );
+    let tip = concat!("Myosotis v", env!("CARGO_PKG_VERSION"));
     for (slot, unit) in tray.szTip.iter_mut().take(127).zip(tip.encode_utf16()) {
         *slot = unit;
     }
@@ -1038,16 +1082,24 @@ pub fn run() -> Result<()> {
                 saved.label()
             ));
         }
+        let tray_icon = match TrayIcon::small() {
+            Ok(icon) => icon,
+            Err(error) => {
+                let _ = UnregisterHotKey(hwnd, HOTKEY);
+                let _ = DestroyWindow(hwnd);
+                return Err(error);
+            }
+        };
         let mut tray = NOTIFYICONDATAW {
             cbSize: size_of::<NOTIFYICONDATAW>() as u32,
             hWnd: hwnd,
             uID: 1,
             uFlags: NIF_ICON | NIF_MESSAGE | NIF_TIP,
             uCallbackMessage: TRAY,
-            hIcon: wc.hIcon,
+            hIcon: tray_icon.0,
             ..Default::default()
         };
-        update_tray_tip(&mut tray, &bindings);
+        update_tray_tip(&mut tray);
         if !Shell_NotifyIconW(NIM_ADD, &tray).as_bool() {
             let _ = UnregisterHotKey(hwnd, HOTKEY);
             let _ = DestroyWindow(hwnd);
@@ -1084,7 +1136,9 @@ pub fn run() -> Result<()> {
                 hover: None,
                 hint: String::new(),
                 tray,
+                tray_icon,
                 taskbar_created: RegisterWindowMessageW(w!("TaskbarCreated")),
+                schema_tray_close: None,
             })
         });
         if std::env::args().any(|arg| arg == "--capture") {

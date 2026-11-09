@@ -32,8 +32,44 @@ fn app() -> App {
         hover: None,
         hint: String::new(),
         tray: NOTIFYICONDATAW::default(),
+        tray_icon: TrayIcon::default(),
         taskbar_created: 0,
+        schema_tray_close: None,
     }
+}
+
+#[test]
+fn failed_tray_refresh_preserves_the_existing_owned_icon() {
+    unsafe {
+        let mut app = app();
+        app.tray_icon = TrayIcon::small().unwrap();
+        app.tray.hIcon = app.tray_icon.0;
+        let original = app.tray_icon.0;
+        // No tray entry is registered by this fixture; NIM_MODIFY must fail without adding one.
+        app.refresh_tray_icon(NIM_MODIFY);
+        assert_eq!(app.tray.hIcon, original);
+        assert_eq!(app.tray_icon.0, original);
+        let mut info = ICONINFO::default();
+        GetIconInfo(original, &mut info).unwrap();
+        let _ = DeleteObject(info.hbmColor);
+        let _ = DeleteObject(info.hbmMask);
+        drop(app);
+        assert!(GetIconInfo(original, &mut ICONINFO::default()).is_err());
+    }
+}
+
+#[test]
+fn tray_toggle_keeps_close_intent_after_focus_loss_finishes_hiding_schema() {
+    let mut app = app();
+    app.schema_tray_close = Some(true);
+    unsafe {
+        app.message(TRAY, WPARAM(0), LPARAM(WM_LBUTTONUP as isize));
+    }
+    assert_eq!(app.schema_tray_close, None);
+    assert!(
+        !schema::visible(),
+        "button-up must not reopen a schema hidden after button-down"
+    );
 }
 
 #[test]
