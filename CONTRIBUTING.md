@@ -44,6 +44,14 @@ cargo test --locked
 
 The unit tests cover history branching, numbered marks, tool paths, selection bounds, and resize coordinates. Windows rendering tests use memory bitmaps and an invisible window. They check numeral pixels and incremental ink-cache behavior through growing strokes, abandoned active ink, undo/redo/reset, and memory-only export. They do not need the resident app to quit.
 
+Clipboard encoding tests validate PNG pixel round-tripping, DIB row order, and worker errors in memory. The separate `native_clipboard_delayed_png_lifecycle` test uses hidden windows and does not move the cursor or take focus, but **does replace the system clipboard** with synthetic images and text. Run it only with explicit clipboard-test authorization; it is ignored during routine `cargo test`:
+
+```powershell
+cargo test --locked native_clipboard_delayed_png_lifecycle -- --ignored --nocapture --test-threads=1
+```
+
+It checks immediate bitmap access, an early PNG request waiting for encoding, clipboard contention, newer text replacing pending PNG, consecutive image copies, encoding failure, and PNG surviving owner-window destruction. These checks do not qualify actual application paste compatibility or visible completion latency.
+
 For a rendering change, this optional stress diagnostic also leaves the desktop available:
 
 ```powershell

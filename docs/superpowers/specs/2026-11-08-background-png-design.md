@@ -1,0 +1,11 @@
+# Background PNG clipboard design
+
+Approved by the user in this issue's worker session: “That is good. I authorize this. Now go.” This authorizes implementation of the proposed bitmap-first, background-PNG approach; shipping still requires user testing and approval.
+
+On completion, render an owned image snapshot and publish CF_DIB plus a delayed PNG format. Close the overlay after bitmap publication succeeds. Encode PNG on a worker thread using its own COM apartment. Notify the resident window when encoding finishes; publish PNG only while the app owns the same clipboard item. An immediate PNG request waits for this job and supplies its result through WM_RENDERFORMAT, without opening the clipboard. Apps consuming CF_DIB can paste immediately. Clipboard replacement discards the old pending result. Shutdown renders pending PNG through WM_RENDERALLFORMATS while ownership remains valid. Encoding failure preserves the already published bitmap and reports a diagnostic; publication failure leaves the overlay available to retry.
+
+The worker owns ordinary pixel bytes only. GDI handles, WIC objects, and clipboard operations stay on their respective threads. The clipboard module handles its messages before borrowing App, because EmptyClipboard and delayed-render requests can reenter the window procedure. No background result may overwrite a newer clipboard item. No automatic settings changes, dependencies, or user-facing controls.
+
+Alternatives considered: faster PNG encoding retains synchronous delay and needs another encoder; bitmap-only copying loses explicit PNG; hiding before publishing permits stale immediate paste. Selected approach preserves the two formats and moves content-dependent compression off the completion path. Immediate PNG consumers still wait; WIC encoding time itself does not improve.
+
+Remove temporary timing hooks and experimental presentation/filter switches from product source after preserving their sources and binaries in .tmp. Retain original rendering behavior. Meaningful tests cover pixel-identical PNG decoding, failed/disconnected jobs, stale completions, delayed availability, clipboard replacement, immediate PNG requests, and shutdown publication. Unit/offscreen checks do not touch clipboard or focus. Interactive tests require explicit desktop availability.
