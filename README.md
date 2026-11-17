@@ -40,7 +40,7 @@ cargo build --locked --release
 .\target\release\myosotis.exe --capture
 ```
 
-Myosotis stays in the notification area after you copy or cancel. Use **Ctrl+Alt+S** to capture again. Click its flower icon to toggle **Input schema** open or closed, or right-click it for capture, **Input schema**, theme options, **Start at login**, and Quit. If Windows hides the icon, look under the notification area's overflow arrow.
+Myosotis stays in the notification area after you copy or cancel. Use **Ctrl+Alt+S** to capture again. Click its flower icon to toggle **Input schema** open or closed, or right-click it for **Input schema**, **Dark theme**, **Start at login**, **Save to local**, and **Quit**. If Windows hides the icon, look under the notification area's overflow arrow.
 
 Launching the executable again opens the resident app. The default capture shortcut is **Ctrl+Alt+S**. You can change it through **Input schema** in the tray menu; Myosotis reports shortcuts that Windows cannot register.
 
@@ -54,9 +54,9 @@ Shortcuts save immediately to `%LOCALAPPDATA%\Myosotis\settings.toml`. Conflicts
 
 ### Appearance and settings
 
-Right-click the notification-area icon and toggle **Dark Theme**. A check mark means Dark; unchecked means Light. Dark is the default; changes apply immediately, including during a capture. The theme changes the toolbar and guidance panels. Screenshots, white canvases, and copied annotations keep their original colors.
+Right-click the notification-area icon and toggle **Dark theme**. A check mark means Dark; unchecked means Light. Dark is the default; changes apply immediately, including during a capture. The theme changes the toolbar and guidance panels. Screenshots, white canvases, and copied annotations keep their original colors.
 
-Myosotis saves theme and shortcut preferences in `%LOCALAPPDATA%\Myosotis\settings.toml` when you change them. If saving fails, the theme still applies for the current session and Myosotis reports the problem. Missing or invalid settings use Dark at startup.
+Myosotis saves theme, shortcut, and **Save to local** preferences in `%LOCALAPPDATA%\Myosotis\settings.toml` when you change them. If saving fails, the theme still applies for the current session and Myosotis reports the problem. Missing or invalid settings use Dark at startup.
 
 To reset preferences, quit Myosotis and delete `%LOCALAPPDATA%\Myosotis`. This folder remains if you remove the portable executable; you can delete it yourself. Theme preferences do not use the registry.
 
@@ -69,6 +69,12 @@ If the entry exists but Windows marks it disabled, the menu shows **Start at log
 This creates only a per-user `Myosotis` value under `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run`; no administrator rights are required. Login starts Myosotis quietly in the notification area. If Windows blocks reading or changing the entry, Myosotis reports the error; an unreadable state is shown as unavailable rather than unchecked.
 
 The entry points to the executable's current location. Turn **Start at login** off before moving or deleting a portable copy. After moving it, run the new copy and enable the option again. Resetting theme preferences does not remove startup registration. Windows startup controls or organizational policy can still prevent the registered app from launching.
+
+### Save to local
+
+Right-click the notification-area icon and check **Save to local**, directly below **Start at login**. It is off by default and remembers your choice. While checked, each image you finish copying is also saved as a PNG in your Windows **Pictures\Screenshots** folder, for example `Screenshot 2026-11-15 215736.png`. Myosotis follows the Windows Pictures folder location, including redirection, and creates Screenshots if needed. If a filename already exists, it adds ` (2)`, ` (3)`, and so on instead of overwriting it.
+
+The file contains the same selected area, annotations, and screenshot or white background as the clipboard image, without the toolbar or selection handles. Canceled captures and unsuccessful copy attempts create no image file. Encoding and saving run in the background after completion; normal Quit waits for pending saves. If saving fails, Myosotis reports the problem; the image was still copied to the clipboard. Unchecking the option stops saving future captures; files already saved remain.
 
 ## Capture and sketch
 
@@ -119,7 +125,7 @@ Double-click quickly and keep the pointer nearly still. Myosotis uses its own sh
 
 ## Privacy and limitations
 
-Capture and annotation happen locally. Myosotis does not upload images, save captures to disk, or connect to your agent. It puts the finished image on the Windows clipboard as a bitmap and PNG. Windows clipboard history, synchronization, and other clipboard-reading applications can access it according to your system settings.
+Capture and annotation happen locally. Myosotis does not upload images or connect to your agent. It puts the finished image on the Windows clipboard as a bitmap and PNG. **Save to local** is off by default; when enabled, completed captures also remain as PNG files in **Pictures\Screenshots** until you delete them. If your Pictures folder is synchronized by OneDrive or another service, those files follow that service's settings. Windows clipboard history, synchronization, and other clipboard-reading applications can access clipboard images according to your system settings.
 
 Pen strokes taper at the start and end. Mouse drawing uses mild speed-based width variation; valid stylus pressure controls the width instead. Captured positions are preserved without artificial path smoothing. Annotations use refined coral ink, and numbered badges widen to fit multiple digits.
 

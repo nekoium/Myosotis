@@ -6,6 +6,7 @@ mod completion_tests;
 mod icon_tests;
 #[cfg(test)]
 mod input_tests;
+mod local_save;
 mod render;
 mod schema;
 mod startup;
@@ -13,7 +14,7 @@ mod startup;
 use crate::{
     document::{hit_edge, resize, Document, Point, Rect, Tool},
     input::{Action, Bindings},
-    settings::{self, Theme},
+    settings::{self, SaveToLocal, Theme},
 };
 use ::windows::{
     core::*,
@@ -63,6 +64,8 @@ const DARK_THEME: usize = 3;
 const QUIT: usize = 2;
 const START_AT_LOGIN: usize = 5;
 const INPUT_SCHEMA: usize = 6;
+const SAVE_TO_LOCAL: usize = 7;
+const SAVE_TIMER: usize = 2;
 const HOTKEY_ALTERNATE: i32 = HOTKEY + 1;
 
 #[derive(Default)]
@@ -135,6 +138,8 @@ struct App {
     doc: Document,
     renderer: Option<render::Renderer>,
     theme: Theme,
+    save_to_local: SaveToLocal,
+    saves: local_save::Saves,
     bindings: Bindings,
     input_hints: InputHints,
     hotkey_id: i32,
@@ -291,7 +296,16 @@ impl App {
                 );
                 self.close_overlay();
                 clipboard::start_encoding();
+                let image = self.save_to_local.0.then(|| publication.0.clone());
                 drop(publication);
+                if let Some(image) = image {
+                    match self.saves.start(image) {
+                        Ok(()) => {
+                            SetTimer(self.hwnd, SAVE_TIMER, 100, None);
+                        }
+                        Err(error) => Self::save_errors(&[error.to_string()]),
+                    }
+                }
             }
             Err(error) => {
                 eprintln!("Clipboard copy failed: {error}");
@@ -692,6 +706,20 @@ impl App {
             ));
         }
     }
+    fn save_errors(errors: &[String]) {
+        if !errors.is_empty() {
+            show_error(&format!("Could not save image to Pictures\\Screenshots. The clipboard image was copied successfully.\n\n{}", errors.join("\n")));
+        }
+    }
+    unsafe fn change_save_to_local(&mut self) {
+        let next = SaveToLocal(!self.save_to_local.0);
+        match settings::path().and_then(|path| next.save(&path)) {
+            Ok(()) => self.save_to_local = next,
+            Err(error) => show_error(&format!(
+                "Could not save the Save to local preference. Previous choice kept.\n\n{error}"
+            )),
+        }
+    }
     unsafe fn tray_menu(&mut self) {
         if let Ok(menu) = CreatePopupMenu() {
             let _ = AppendMenuW(menu, MF_STRING, INPUT_SCHEMA, w!("Input schema"));
@@ -701,7 +729,7 @@ impl App {
             } else {
                 MF_STRING
             };
-            let _ = AppendMenuW(menu, theme_flags, DARK_THEME, w!("Dark Theme"));
+            let _ = AppendMenuW(menu, theme_flags, DARK_THEME, w!("Dark theme"));
             let startup_state = startup::enabled();
             let (startup_flags, startup_label) = match &startup_state {
                 Ok(true) if startup::disabled_in_windows() => (
@@ -716,6 +744,12 @@ impl App {
                 ),
             };
             let _ = AppendMenuW(menu, startup_flags, START_AT_LOGIN, startup_label);
+            let save_flags = if self.save_to_local.0 {
+                MF_STRING | MF_CHECKED
+            } else {
+                MF_STRING
+            };
+            let _ = AppendMenuW(menu, save_flags, SAVE_TO_LOCAL, w!("Save to local"));
             let _ = AppendMenuW(menu, MF_SEPARATOR, 0, PCWSTR::null());
             let _ = AppendMenuW(menu, MF_STRING, QUIT, w!("Quit"));
             let mut p = POINT::default();
@@ -754,6 +788,7 @@ impl App {
                         ));
                     }
                 }
+                SAVE_TO_LOCAL => self.change_save_to_local(),
                 QUIT => {
                     let _ = DestroyWindow(self.hwnd);
                 }
@@ -897,6 +932,16 @@ impl App {
             WM_LBUTTONUP => self.up(false, Input::Mouse),
             WM_RBUTTONUP => self.up(true, Input::Mouse),
             WM_MOUSEMOVE if self.visible => self.moved(),
+            WM_TIMER if wparam.0 == SAVE_TIMER => {
+                // Defer error dialogs while the user is drawing another capture.
+                if !self.visible {
+                    let errors = self.saves.collect(false);
+                    if self.saves.is_empty() {
+                        let _ = KillTimer(self.hwnd, SAVE_TIMER);
+                    }
+                    Self::save_errors(&errors);
+                }
+            }
             WM_TIMER if self.visible => {
                 if self
                     .pending_click
@@ -1118,6 +1163,10 @@ pub fn run() -> Result<()> {
                 doc: Document::default(),
                 renderer: None,
                 theme,
+                save_to_local: settings::path()
+                    .and_then(|path| SaveToLocal::load(&path))
+                    .unwrap_or_default(),
+                saves: local_save::Saves::default(),
                 input_hints: InputHints::new(&bindings),
                 bindings,
                 hotkey_id: HOTKEY,
@@ -1154,7 +1203,8 @@ pub fn run() -> Result<()> {
             DispatchMessageW(&msg);
         }
         APP.with(|a| {
-            if let Some(app) = a.borrow_mut().take() {
+            if let Some(mut app) = a.borrow_mut().take() {
+                App::save_errors(&app.saves.collect(true));
                 schema::close();
                 let _ = Shell_NotifyIconW(NIM_DELETE, &app.tray);
                 let _ = UnregisterHotKey(app.hwnd, app.hotkey_id);

@@ -80,6 +80,27 @@ fn clipboard_png_fallback_uses_the_existing_ui_com_apartment() {
 }
 
 #[test]
+fn clipboard_and_local_workers_share_one_png_result() {
+    let image = Arc::new(Image::new(2, 2, &[99; 16]).unwrap());
+    let barrier = Arc::new(std::sync::Barrier::new(3));
+    let jobs: Vec<_> = (0..2)
+        .map(|_| {
+            let image = image.clone();
+            let barrier = barrier.clone();
+            std::thread::spawn(move || {
+                barrier.wait();
+                image.png().unwrap().as_ptr() as usize
+            })
+        })
+        .collect();
+    barrier.wait();
+    let expected = image.png().unwrap().as_ptr() as usize;
+    for job in jobs {
+        assert_eq!(job.join().unwrap(), expected);
+    }
+}
+
+#[test]
 fn clipboard_worker_error_is_reported_without_panic() {
     let mut pending = Pending {
         owner: HWND::default(),
