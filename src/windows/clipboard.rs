@@ -12,7 +12,12 @@ use ::windows::{
         UI::WindowsAndMessaging::*,
     },
 };
-use std::{cell::RefCell, mem::size_of, sync::Arc, thread::JoinHandle};
+use std::{
+    cell::RefCell,
+    mem::size_of,
+    sync::{Arc, OnceLock},
+    thread::JoinHandle,
+};
 
 const PNG_TIMER: usize = 0x504e47;
 thread_local! { static PENDING: RefCell<Option<Pending>> = const { RefCell::new(None) }; }
@@ -21,6 +26,7 @@ pub(super) struct Image {
     width: i32,
     height: i32,
     pixels: Vec<u8>,
+    png: OnceLock<Result<Vec<u8>>>,
 }
 impl Image {
     pub fn new(width: i32, height: i32, pixels: &[u8]) -> Result<Self> {
@@ -42,7 +48,15 @@ impl Image {
             width,
             height,
             pixels,
+            png: OnceLock::new(),
         })
+    }
+    pub(super) fn png(&self) -> Result<&[u8]> {
+        self.png
+            .get_or_init(|| encode_uncached(self))
+            .as_ref()
+            .map(Vec::as_slice)
+            .map_err(Clone::clone)
     }
     fn dib(&self) -> Vec<u8> {
         let mut info = header(self.width, self.height);
@@ -101,7 +115,7 @@ impl Pending {
 
 // Keep the clipboard locked until the overlay is hidden; clipboard listeners can
 // synchronously request PNG as soon as CloseClipboard announces the new item.
-pub(super) struct Publication;
+pub(super) struct Publication(pub Arc<Image>);
 impl Drop for Publication {
     fn drop(&mut self) {
         unsafe {
@@ -111,6 +125,7 @@ impl Drop for Publication {
 }
 
 pub(super) unsafe fn publish(owner: HWND, image: Image) -> Result<Publication> {
+    let image = Arc::new(image);
     // Prepare before opening the clipboard, so preparation errors preserve existing data.
     let dib = ClipboardMemory::new(&image.dib())?;
     let format = RegisterClipboardFormatW(w!("PNG"));
@@ -135,14 +150,14 @@ pub(super) unsafe fn publish(owner: HWND, image: Image) -> Result<Publication> {
             *slot.borrow_mut() = Some(Pending {
                 owner,
                 format,
-                image: Arc::new(image),
+                image: image.clone(),
                 job: None,
             })
         });
         Ok(())
     })();
     match result {
-        Ok(()) => Ok(Publication),
+        Ok(()) => Ok(Publication(image)),
         Err(error) => {
             let _ = CloseClipboard();
             Err(error)
@@ -226,6 +241,9 @@ pub(super) unsafe fn shutdown(hwnd: HWND) {
 }
 
 fn encode(image: &Image) -> Result<Vec<u8>> {
+    Ok(image.png()?.to_vec())
+}
+fn encode_uncached(image: &Image) -> Result<Vec<u8>> {
     unsafe {
         let initialized = CoInitializeEx(None, COINIT_MULTITHREADED);
         if initialized == RPC_E_CHANGED_MODE {

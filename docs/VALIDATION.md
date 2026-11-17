@@ -1,5 +1,11 @@
 # Windows MVP validation
 
+## Save to local — issue #25
+
+The local-save implementation passes `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, and `cargo test --locked -- --test-threads=1` (48 passed, two intentionally ignored). An earlier parallel run passed; a later parallel run intermittently failed the existing schema recording-state test, which then passed in isolation and in the serial full suite. That test reads live keyboard state; no schema code was changed here. Focused tests cover default-off preference persistence and failure preservation; concurrent timestamp collisions without overwrites; encoding and destination failures; canceled/unselected captures starting no save; shared PNG caching; and background jobs surviving source release and draining on shutdown. Hidden-window export tests save and decode PNGs to check selected dimensions, annotations, opacity, and both screenshot and white backgrounds. Test output stays under the project's `.tmp` directory and is removed afterward.
+
+The release `offscreen_stroke_stress` diagnostic also passes. These checks neither take desktop focus nor replace clipboard contents. Native tray checkbox interaction, actual redirected Pictures folders, save-error dialogs, and real application paste/clipboard ownership behavior were not exercised for this change. The updated theme integration script was not run because the desktop was not made available. This feature has no Save As dialog.
+
 ## Version 0.2.0
 
 See [the 0.2.0 validation record](releases/0.2.0/VALIDATION.md) for current package checks, native smoke/theme results, pressure diagnostics, fresh five-run performance comparisons, and the packaged executable's 60-second replay. Natural strokes are now the approved default. The sections below retain historical evidence from earlier releases.

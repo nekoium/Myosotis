@@ -29,6 +29,26 @@ impl Theme {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SaveToLocal(pub bool);
+
+impl SaveToLocal {
+    pub fn load(path: &Path) -> io::Result<Self> {
+        Ok(Self(
+            read_table(path)?
+                .get("save_to_local")
+                .and_then(toml::Value::as_bool)
+                .unwrap_or(false),
+        ))
+    }
+
+    pub fn save(self, path: &Path) -> io::Result<()> {
+        let mut table = read_table(path)?;
+        table.insert("save_to_local".into(), toml::Value::Boolean(self.0));
+        save_table(path, &table)
+    }
+}
+
 pub(crate) fn save_table(path: &Path, table: &toml::Table) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -65,6 +85,38 @@ pub fn path() -> io::Result<std::path::PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn local_saving_defaults_and_preserves_other_preferences() {
+        let directory = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(".tmp")
+            .join(format!("local-save-settings-{}", std::process::id()));
+        let path = directory.join("settings.toml");
+        assert_eq!(SaveToLocal::load(&path).unwrap(), SaveToLocal(false));
+        assert!(!directory.exists());
+        SaveToLocal(true).save(&path).unwrap();
+        Theme::Light.save(&path).unwrap();
+        assert_eq!(SaveToLocal::load(&path).unwrap(), SaveToLocal(true));
+        SaveToLocal(false).save(&path).unwrap();
+        assert_eq!(Theme::load(&path).unwrap(), Theme::Light);
+        assert_eq!(SaveToLocal::load(&path).unwrap(), SaveToLocal(false));
+        for text in ["save_to_local = 'true'", "save_to_local = 1"] {
+            fs::write(&path, text).unwrap();
+            assert_eq!(SaveToLocal::load(&path).unwrap(), SaveToLocal(false));
+        }
+        fs::write(&path, "save_to_local = true\nother = 42\n").unwrap();
+        let temporary = path.with_extension("toml.tmp");
+        fs::create_dir(&temporary).unwrap();
+        assert!(SaveToLocal(false).save(&path).is_err());
+        assert_eq!(SaveToLocal::load(&path).unwrap(), SaveToLocal(true));
+        fs::remove_dir(&temporary).unwrap();
+        SaveToLocal(false).save(&path).unwrap();
+        assert_eq!(read_table(&path).unwrap()["other"].as_integer(), Some(42));
+        fs::write(&path, "save_to_local = [").unwrap();
+        assert!(SaveToLocal(true).save(&path).is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "save_to_local = [");
+        fs::remove_dir_all(directory).unwrap();
+    }
 
     #[test]
     fn defaults_round_trips_and_failed_saves_preserve_settings() {

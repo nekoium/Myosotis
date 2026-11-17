@@ -64,20 +64,20 @@ function Open-Themes([int]$Selected) {
     Wait-For { [ThemeCheck]::FindWindow('#32768',[IntPtr]::Zero) -ne [IntPtr]::Zero } 'tray menu'
     $popup = [ThemeCheck]::FindWindow('#32768',[IntPtr]::Zero)
     $menu = [ThemeCheck]::SendMessage($popup,0x1E1,[IntPtr]::Zero,[IntPtr]::Zero)
-    Assert ([ThemeCheck]::GetMenuItemCount($menu) -eq 6) 'Tray menu should have four actions and two separators'
+    Assert ([ThemeCheck]::GetMenuItemCount($menu) -eq 7) 'Tray menu should have five actions and two separators'
     $label = New-Object Text.StringBuilder 128
-    foreach ($entry in @(@(0,'Input schema'),@(2,'Dark Theme'),@(5,'Quit'))) {
+    foreach ($entry in @(@(0,'Input schema'),@(2,'Dark theme'),@(4,'Save to local'),@(6,'Quit'))) {
         [void]$label.Clear()
         [void][ThemeCheck]::GetMenuString($menu,$entry[0],$label,$label.Capacity,0x400)
         Assert ($label.ToString() -eq $entry[1]) "Unexpected tray label at $($entry[0]): $label"
     }
     $script:themeMenu = $menu
     $state = [ThemeCheck]::GetMenuState($menu,3,0)
-    Assert ($state -ne [uint32]::MaxValue) 'Missing Dark Theme item'
-    Assert ((($state -band 8) -ne 0) -eq ($Selected -eq 3)) 'Incorrect Dark Theme check mark'
+    Assert ($state -ne [uint32]::MaxValue) 'Missing Dark theme item'
+    Assert ((($state -band 8) -ne 0) -eq ($Selected -eq 3)) 'Incorrect Dark theme check mark'
     $script:darkTheme = $Selected -eq 3
     $area = New-Object ThemeCheck+Rect
-    Assert ([ThemeCheck]::GetMenuItemRect([IntPtr]::Zero,$menu,2,[ref]$area)) 'Cannot locate Dark Theme'
+    Assert ([ThemeCheck]::GetMenuItemRect([IntPtr]::Zero,$menu,2,[ref]$area)) 'Cannot locate Dark theme'
     $script:themeMenuX = [int](($area.Left+$area.Right)/2)
     $script:themeMenuY = [int](($area.Top+$area.Bottom)/2)
 }

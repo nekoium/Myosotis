@@ -14,6 +14,8 @@ fn app() -> App {
         doc: Document::default(),
         renderer: None,
         theme: Theme::Dark,
+        save_to_local: SaveToLocal::default(),
+        saves: local_save::Saves::default(),
         bindings: Bindings::default(),
         input_hints: InputHints::new(&Bindings::default()),
         hotkey_id: HOTKEY,
@@ -97,6 +99,23 @@ fn configured_tool_keys_and_guidance_use_the_same_bindings() {
     assert!(app.input_hints.selection.ends_with("C cancel"));
     assert!(app.input_hints.workflow.contains("C cancel"));
     assert!(app.input_hints.workflow.ends_with("Shift lock"));
+}
+
+#[test]
+fn local_save_does_not_start_for_unselected_or_canceled_captures() {
+    let mut app = app();
+    app.save_to_local = SaveToLocal(true);
+    unsafe {
+        app.copy();
+        assert!(app.saves.is_empty());
+        app.doc.select(
+            Rect::between(Point::default(), Point::new(100., 100.)),
+            true,
+        );
+        app.close_overlay();
+        assert!(app.saves.is_empty());
+        assert!(app.doc.selection.is_none());
+    }
 }
 
 #[test]
