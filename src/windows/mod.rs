@@ -103,6 +103,7 @@ impl Drop for TrayIcon {
 struct InputHints {
     toolbar: [String; 6],
     workflow: String,
+    locked_workflow: String,
     selection: String,
 }
 impl InputHints {
@@ -116,7 +117,8 @@ impl InputHints {
                 format!("Copy image and close · {} or Enter", bindings.label(Action::Copy)),
                 format!("Cancel capture · {}", bindings.label(Action::Cancel)),
             ],
-            workflow: format!("Double-click or {} to copy · {} undo · {} cancel", bindings.label(Action::Copy), bindings.label(Action::Undo), bindings.label(Action::Cancel)),
+            workflow: format!("Double-click or {} to copy · {} undo · {} cancel · Shift lock", bindings.label(Action::Copy), bindings.label(Action::Undo), bindings.label(Action::Cancel)),
+            locked_workflow: format!("Canvas locked · Shift unlock · {} undo · Toolbar to copy or cancel", bindings.label(Action::Undo)),
             selection: format!("Myosotis · Drag to capture · Right-drag for white canvas · Click for monitor · {} cancel", bindings.label(Action::Cancel)),
         }
     }
@@ -147,6 +149,9 @@ struct App {
     gesture: Option<Gesture>,
     click_start: Option<Click>,
     pending_click: Option<Click>,
+    locked: bool,
+    lock_fade: schema::motion::Tween<1>,
+    lock_fading: bool,
     space: bool,
     pen_id: Option<u32>,
     pen_clock: u64,
@@ -223,6 +228,7 @@ impl App {
         self.pen_id = None;
         self.pen_clock = 0;
         self.doc = Document::default();
+        self.reset_lock();
         self.gesture = None;
         self.click_start = None;
         self.pending_click = None;
@@ -240,6 +246,7 @@ impl App {
     }
     unsafe fn close_overlay(&mut self) {
         self.visible = false;
+        self.reset_lock();
         self.click_start = None;
         self.pending_click = None;
         self.gesture = None;
@@ -257,6 +264,44 @@ impl App {
         self.renderer = None;
         self.pixels.clear();
         self.pixels.shrink_to_fit();
+    }
+    fn reset_lock(&mut self) {
+        self.locked = false;
+        self.lock_fade = schema::motion::Tween::new([0.], Instant::now());
+        self.lock_fading = false;
+    }
+    fn toggle_lock(&mut self) {
+        self.flush_click();
+        self.click_start = None;
+        self.locked = !self.locked;
+        self.hint = if self.locked {
+            self.hint
+                .replace("Press Enter to retry", "Click Copy to retry")
+        } else {
+            self.hint
+                .replace("Click Copy to retry", "Press Enter to retry")
+        };
+        self.lock_fade.retarget(
+            [f32::from(self.locked)],
+            if self.locked {
+                schema::motion::OPEN
+            } else {
+                schema::motion::CLOSE
+            },
+            Instant::now(),
+        );
+        if !schema::animations_enabled() {
+            self.lock_fade.settle();
+        }
+        self.lock_fading = self.lock_fade.active(Instant::now());
+    }
+    fn copy_failure_hint(&self, error: &str) -> String {
+        let retry = if self.locked {
+            "Click Copy to retry"
+        } else {
+            "Press Enter to retry"
+        };
+        format!("Copy failed; image kept. {retry}. {error}")
     }
     fn flush_click(&mut self) {
         if self.pending_click.take().is_some() {
@@ -295,7 +340,7 @@ impl App {
             }
             Err(error) => {
                 eprintln!("Clipboard copy failed: {error}");
-                self.hint = format!("Copy failed; image kept. Press Enter to retry. {error}");
+                self.hint = self.copy_failure_hint(&error.to_string());
                 self.repaint();
             }
         }
@@ -376,7 +421,8 @@ impl App {
                     && hit_edge(selection, p, 6. * self.scale) == edge
             })
         });
-        if !blank
+        if !self.locked
+            && !blank
             && !toolbar
             && !resizing
             && self
@@ -481,7 +527,7 @@ impl App {
         self.pending_click = self
             .click_start
             .take()
-            .filter(|click| click.matches(p, input, self.scale));
+            .filter(|click| !self.locked && click.matches(p, input, self.scale));
         if self.pending_click.is_none() {
             self.doc.finish();
         }
@@ -547,13 +593,23 @@ impl App {
         }
     }
     unsafe fn key(&mut self, key: usize, repeat: bool) {
+        if crate::input::normalize_key(key as u16) == 0x10 {
+            if !repeat {
+                self.toggle_lock();
+                self.repaint();
+            }
+            return;
+        }
+        let action = self.bindings.action(key as u16);
+        if self.locked && (key == 0x0d || matches!(action, Some(Action::Copy | Action::Cancel))) {
+            return;
+        }
         if key == 0x20 {
             if !repeat {
                 self.down(false, Input::Space);
             }
             return;
         }
-        let action = self.bindings.action(key as u16);
         if action != Some(Action::Cancel) {
             self.flush_click();
             self.click_start = None;
@@ -609,7 +665,15 @@ impl App {
                     self.input_hints
                         .toolbar
                         .get(item)
-                        .map(String::as_str)
+                        .map(|label| {
+                            if self.locked && item == 4 {
+                                "Copy image and close"
+                            } else if self.locked && item == 5 {
+                                "Cancel capture"
+                            } else {
+                                label.as_str()
+                            }
+                        })
                         .unwrap_or("")
                 })
             });
@@ -617,6 +681,8 @@ impl App {
                 self.hint.as_str()
             } else if let Some(label) = toolbar_label {
                 label
+            } else if self.doc.selection.is_some() && self.locked {
+                &self.input_hints.locked_workflow
             } else if self.doc.selection.is_some() {
                 &self.input_hints.workflow
             } else {
@@ -630,10 +696,12 @@ impl App {
                     self.toolbar(),
                     self.pointer,
                     hint,
+                    self.lock_fade.sample(Instant::now())[0],
                 )
             });
             if let Some(Err(error)) = result {
-                self.hint = format!("Display error: {error}. Escape and capture again.");
+                self.hint =
+                    format!("Display error: {error}. Cancel with the toolbar and capture again.");
             }
         }
         let _ = EndPaint(self.hwnd, &ps);
@@ -898,6 +966,10 @@ impl App {
             WM_RBUTTONUP => self.up(true, Input::Mouse),
             WM_MOUSEMOVE if self.visible => self.moved(),
             WM_TIMER if self.visible => {
+                if self.lock_fading {
+                    self.repaint();
+                    self.lock_fading = self.lock_fade.active(Instant::now());
+                }
                 if self
                     .pending_click
                     .is_some_and(|click| click.since.elapsed() > DOUBLE_CLICK_TIME)
@@ -1130,6 +1202,9 @@ pub fn run() -> Result<()> {
                 gesture: None,
                 click_start: None,
                 pending_click: None,
+                locked: false,
+                lock_fade: schema::motion::Tween::new([0.], Instant::now()),
+                lock_fading: false,
                 space: false,
                 pen_id: None,
                 pen_clock: 0,

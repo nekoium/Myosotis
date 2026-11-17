@@ -1,11 +1,11 @@
 use super::*;
 use crate::input::{self, Action, Bindings, Shortcut};
 use ::windows::Win32::UI::Controls::WM_MOUSELEAVE;
-mod motion;
+pub(super) mod motion;
 use motion::Tween;
 const MOTION_TIMER: usize = 18;
 
-fn animations_enabled() -> bool {
+pub(super) fn animations_enabled() -> bool {
     let mut enabled = BOOL(0);
     unsafe {
         SystemParametersInfoW(

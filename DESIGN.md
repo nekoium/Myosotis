@@ -34,11 +34,17 @@ Make visual feedback for coding agents faster to communicate: invoke from anywhe
   - Pen tool: hold Space while moving the mouse to draw.
 - `Z`: undo.
 - `Y`: redo.
-- Enter: copy the resulting image to the clipboard and close the overlay.
+- Enter: copy the resulting image to the clipboard and close the overlay (while unlocked).
+
+### Canvas lock
+
+For [issue #20](https://github.com/nekoium/Myosotis/issues/20), press Shift once to lock or unlock the canvas. Shift is fixed and reserved, ignores auto-repeat, and does not require holding. Each capture starts unlocked; lock state is not saved. Lock prevents mouse double-click, pen double-tap, and repeated Space completion; taps remain ordinary drawing input without waiting for gesture recognition. While locked, Enter and configured Copy/Cancel keys (Ctrl/Escape by default) are disabled. The quick toolbar's Copy and Cancel buttons remain available, using the existing completion path and retaining the capture if clipboard publication fails. Drawing, tool selection, history, clearing, and selection resizing remain available; toggling preserves active strokes and commits pending first-click ink without discarding it.
+
+A black vector padlock matching toolbar stroke style appears inside the selected field's top-right corner. It is an indicator, does not intercept input, and is excluded from export. It fades in over 160 ms, stays visible while locked, and fades out over 100 ms; reversal continues from the current opacity. Windows' client-area animation preference disables these fades. Only the indicator animates; drawing and completion remain immediate. The existing capture timer repaints during fades and stops extra repaint requests when settled.
 
 ### At any point
 
-- Escape: cancel and close.
+- Escape: cancel and close while unlocked; use the toolbar Cancel button while locked.
 - Global hotkey: initiate the workflow.
 - Overlay shortcuts work with CJK input enabled. The Windows overlay has no text input and detaches its IME context without changing the user's input layout or IME mode. See [issue #9](https://github.com/nekoium/Myosotis/issues/9).
 
@@ -173,7 +179,7 @@ Applications consuming bitmap data can paste immediately. An application request
 This moves compression out of visible completion; it does not reduce PNG encoding time or promise immediate paste into PNG-only consumers.
 
 ### Input schema transitions
-For [issue #18](https://github.com/nekoium/Myosotis/issues/18), Input schema fades in over 160 ms and out over 100 ms. Hover, keyboard focus, recording, and enabled-control colors blend over 60 ms using the selected ease-out curve, without moving or scaling the window. Shortcut actions and text update immediately. Close, Escape outside recording, and focus loss begin dismissal immediately and reject schema input during the remaining visual fade. Recording rules stay unchanged. Reopening interrupts dismissal from the current opacity; opening an already-visible schema does not replay its entrance. Starting capture cancels transitions and hides the schema synchronously before pixels are captured. Windows' client-area animation preference disables all schema transitions, and animation timers stop when idle or hidden. These timings were selected through the [browser study and approved design](docs/superpowers/specs/2026-11-08-input-schema-animation-design.md); native changes were accepted by the user for finalization. An opening flash remains reported and is tracked separately in [issue #23](https://github.com/nekoium/Myosotis/issues/23), with its root cause unconfirmed. Screenshot and annotation controls remain animation-free.
+For [issue #18](https://github.com/nekoium/Myosotis/issues/18), Input schema fades in over 160 ms and out over 100 ms. Hover, keyboard focus, recording, and enabled-control colors blend over 60 ms using the selected ease-out curve, without moving or scaling the window. Shortcut actions and text update immediately. Close, Escape outside recording, and focus loss begin dismissal immediately and reject schema input during the remaining visual fade. Recording rules stay unchanged. Reopening interrupts dismissal from the current opacity; opening an already-visible schema does not replay its entrance. Starting capture cancels transitions and hides the schema synchronously before pixels are captured. Windows' client-area animation preference disables all schema transitions, and animation timers stop when idle or hidden. These timings were selected through the [browser study and approved design](docs/superpowers/specs/2026-11-08-input-schema-animation-design.md); native changes were accepted by the user for finalization. An opening flash remains reported and is tracked separately in [issue #23](https://github.com/nekoium/Myosotis/issues/23), with its root cause unconfirmed. Screenshot and annotation controls remain animation-free except for the explicitly requested canvas lock indicator.
 
 ### Start at login
 

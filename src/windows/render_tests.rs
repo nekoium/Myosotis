@@ -63,6 +63,83 @@ fn document(strokes: usize) -> Document {
 }
 
 #[test]
+fn lock_indicator_fades_clips_and_never_enters_export() -> Result<()> {
+    unsafe {
+        let (_window, mut renderer) = renderer()?;
+        let surface = super::super::capture::Surface::new(640, 480)?;
+        let dc = renderer.factory.CreateDCRenderTarget(&properties())?;
+        dc.BindDC(
+            surface.dc,
+            &RECT {
+                left: 0,
+                top: 0,
+                right: 640,
+                bottom: 480,
+            },
+        )?;
+        let target: ID2D1RenderTarget = dc.cast()?;
+        let selection = Rect::between(Point::new(20., 20.), Point::new(300., 300.));
+        let doc = document(0);
+        let exported = renderer
+            .export(&doc, &vec![255; 640 * 480 * 4], doc.selection.unwrap())?
+            .pixels()
+            .to_vec();
+        for scale in [1., 1.25, 1.5, 2.] {
+            renderer.scale = scale;
+            let mut darkness = Vec::new();
+            for alpha in [0., 0.5, 1.] {
+                target.BeginDraw();
+                target.Clear(Some(&color(1., 1., 1., 1.)));
+                renderer.lock_indicator(&target, selection, alpha)?;
+                target.EndDraw(None, None)?;
+                let pixels = surface.pixels().as_chunks::<4>().0;
+                darkness.push(pixels.iter().map(|p| (255 - p[0]) as u64).sum::<u64>());
+                for (i, p) in pixels.iter().enumerate() {
+                    if p[0] < 250 {
+                        let x = (i % 640) as f32;
+                        let y = (i / 640) as f32;
+                        assert!(x >= selection.right - 32. * scale && x < selection.right);
+                        assert!(y >= selection.top && y < selection.top + 32. * scale);
+                        if alpha == 0.5 {
+                            // Intersecting outline strokes compound alpha, but remain above black.
+                            assert!(p[0] > 0);
+                        }
+                    }
+                }
+            }
+            assert_eq!(darkness[0], 0);
+            assert!(
+                darkness[1] > 0 && darkness[2] > darkness[1],
+                "scale {scale}: {darkness:?}"
+            );
+            // A tiny selection must not let the indicator escape its bounds.
+            target.BeginDraw();
+            target.Clear(Some(&color(1., 1., 1., 1.)));
+            renderer.lock_indicator(
+                &target,
+                Rect::between(Point::new(299., 20.), Point::new(300., 21.)),
+                1.,
+            )?;
+            target.EndDraw(None, None)?;
+            assert!(surface
+                .pixels()
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .all(|p| p[..3] == [255; 3]));
+        }
+        renderer.scale = 1.;
+        assert_eq!(
+            renderer
+                .export(&doc, &vec![255; 640 * 480 * 4], doc.selection.unwrap())?
+                .pixels(),
+            exported
+        );
+        Ok(())
+    }
+}
+
+#[test]
 fn offscreen_cache_preserves_history_and_discards_abandoned_ink() -> Result<()> {
     unsafe {
         let (_window, renderer) = renderer()?;
