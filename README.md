@@ -48,7 +48,7 @@ Launching the executable again opens the resident app. The default capture short
 
 Click the notification-area icon to view or change shortcuts in **Input schema**; click it again to close the window. You can also right-click the icon and choose **Input schema**. Click a keycap and press its replacement. You can also use Tab to focus a keycap and Enter or Space to start editing. Escape dismisses Input schema when you are not editing. While editing, Escape is recorded as a shortcut key if valid and available; Tab or clicking empty space cancels the edit. Switching to another window dismisses Input schema and cancels any unfinished edit; saved changes remain. The floating window stays out of the taskbar and Alt+Tab. Drag anywhere outside the keycaps, Reset, and Close controls to move it. Reopen it from the notification-area icon.
 
-Capture accepts a key combined with Ctrl, Alt, or Win. The capture overlay uses single keys. Space drawing, Enter completion, and mouse gestures remain fixed; Space, Enter, and Tab cannot be reassigned. The window shows each action's primary shortcut. The restore icon beside Close resets all shortcuts, including Capture, without changing theme or startup preferences. It is disabled when the defaults are active.
+Capture accepts a key combined with Ctrl, Alt, or Win. The capture overlay uses single keys. Space drawing, Shift canvas lock, Enter completion, and mouse gestures remain fixed; Space, Shift, Enter, and Tab cannot be reassigned. The window shows each action's primary shortcut. The restore icon beside Close resets all shortcuts, including Capture, without changing theme or startup preferences. It is disabled when the defaults are active.
 
 Shortcuts save immediately to `%LOCALAPPDATA%\Myosotis\settings.toml`. Conflicts, unsupported keys, and failed saves silently leave the previous shortcuts active. If a saved global shortcut is unavailable at startup, Myosotis tries Ctrl+Alt+S and reports the fallback. If neither can be registered, it reports the conflict and exits. The controls below show defaults.
 
@@ -80,6 +80,7 @@ The screen freezes when you invoke Myosotis.
 - Hover over an edge or corner for a moment, then drag to resize. Marks stay where you drew them; anything outside the selected area is left out of the copied image.
 - **Double-click**, press **Ctrl** on its own, press **Enter**, or click the **Copy** button to copy and close. Then paste into your chat or document with **Ctrl+V**.
 - Press **Escape** or click the toolbar's **Cancel** button to cancel and keep your previous clipboard.
+- For longer drawing sessions, press **Shift** once to lock the canvas and again to unlock. While locked, double-clicks, pen double-taps, and repeated Space taps draw normally without finishing; Copy/Cancel keyboard shortcuts (including Enter and Escape) are disabled. Use the toolbar **Copy** or **Cancel** button to finish. A black padlock fades in at the captured area's top-right corner, stays visible while locked, and fades out when unlocked. It is excluded from the copied image. New captures start unlocked.
 
 The toolbar and selection handles stay out of the copied image. If copying fails because another app holds the clipboard, your drawing stays open so you can double-click, press Ctrl, or click Copy to retry.
 
@@ -115,7 +116,7 @@ The other controls depend on whether you have selected an area:
 | During a capture | Double-tap `Space` | Act like a double-click |
 | During a capture | `Esc` | Cancel without copying |
 
-Double-click quickly and keep the pointer nearly still. Myosotis uses its own short double-click timing, which may differ from your Windows setting. If the first click starts a mark, Myosotis removes that mark before copying. Double-click completion works inside or outside the selected area, except on toolbar buttons or while resizing. Mouse clicks and Space taps are counted separately.
+Double-click quickly and keep the pointer nearly still. Myosotis uses its own short double-click timing, which may differ from your Windows setting. If the first click starts a mark, Myosotis removes that mark before copying. Double-click completion works inside or outside the selected area, except on toolbar buttons, while resizing, or while the canvas is locked. Mouse clicks, stylus taps, and Space taps are counted separately.
 
 ## Privacy and limitations
 

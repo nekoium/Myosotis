@@ -26,6 +26,9 @@ fn app() -> App {
         gesture: None,
         click_start: None,
         pending_click: None,
+        locked: false,
+        lock_fade: schema::motion::Tween::new([0.], Instant::now()),
+        lock_fading: false,
         space: false,
         pen_id: None,
         pen_clock: 0,
@@ -92,7 +95,8 @@ fn configured_tool_keys_and_guidance_use_the_same_bindings() {
     }
     assert!(app.input_hints.toolbar[1].contains("W"));
     assert!(app.input_hints.selection.ends_with("C cancel"));
-    assert!(app.input_hints.workflow.ends_with("C cancel"));
+    assert!(app.input_hints.workflow.contains("C cancel"));
+    assert!(app.input_hints.workflow.ends_with("Shift lock"));
 }
 
 #[test]
@@ -157,4 +161,139 @@ fn selection_and_outside_click_completion_preserve_document() {
     assert!(!app.doc.blank);
     assert!(app.doc.annotations.is_empty());
     assert!(app.doc.active.is_none());
+}
+
+#[test]
+fn lock_toggle_ignores_repeat_commits_pending_ink_and_preserves_history() {
+    let mut app = app();
+    app.doc.select(
+        Rect::between(Point::default(), Point::new(100., 100.)),
+        false,
+    );
+    app.doc.tool = Tool::Number;
+    app.doc.begin(Point::new(20., 20.), 1.);
+    app.pending_click = Some(click(Input::Pen, 0));
+    unsafe {
+        app.key(0x10, false);
+        assert!(app.locked);
+        assert!(app.pending_click.is_none());
+        assert_eq!(app.doc.annotations.len(), 1);
+        app.key(0x10, true);
+        assert!(app.locked);
+        app.key(b'Z' as usize, false);
+        assert!(app.doc.annotations.is_empty());
+        app.key(b'Y' as usize, false);
+        assert_eq!(app.doc.annotations.len(), 1);
+        app.key(0x10, false);
+        assert!(!app.locked);
+        app.key(0x10, false);
+        app.reset_lock();
+        assert!(!app.locked);
+        assert_eq!(app.lock_fade.sample(Instant::now()), [0.]);
+    }
+}
+
+#[test]
+fn locked_mouse_pen_and_space_taps_draw_without_completion_or_pending_clicks() {
+    unsafe {
+        for input in [Input::Mouse, Input::Pen, Input::Space] {
+            let mut app = app();
+            app.visible = true;
+            app.doc.select(
+                Rect::between(Point::default(), Point::new(100., 100.)),
+                false,
+            );
+            app.doc.tool = Tool::Number;
+            app.toggle_lock();
+            for time in [0, 40] {
+                let p = Point::new(20., 20.);
+                app.down_sample(false, input, p, None, time);
+                assert!(app.doc.active.is_some());
+                app.up_sample(false, input, p, None, time + 10);
+                assert!(app.visible);
+                assert!(app.pending_click.is_none());
+            }
+            assert_eq!(app.doc.annotations.len(), 2);
+            assert_eq!(app.doc.annotations[1].number, 2);
+        }
+    }
+}
+
+#[test]
+fn locked_keyboard_copy_and_cancel_are_suppressed_including_rebound_keys() {
+    unsafe {
+        let mut app = app();
+        app.visible = true;
+        app.doc.select(
+            Rect::between(Point::default(), Point::new(100., 100.)),
+            false,
+        );
+        app.toggle_lock();
+        // Copy would require a renderer and touch the clipboard if these gates failed.
+        for key in [0x0d, 0x11, 0x1b] {
+            app.key(key, false);
+            assert!(app.visible);
+            assert!(app.locked);
+        }
+        app.bindings.set(Action::Copy, b'C' as u16).unwrap();
+        app.bindings.set(Action::Cancel, b'X' as u16).unwrap();
+        for key in *b"CX" {
+            app.key(key as usize, false);
+            assert!(app.visible);
+            assert!(app.locked);
+        }
+        assert!(app
+            .copy_failure_hint("test")
+            .contains("Click Copy to retry"));
+        app.key(0x10, false);
+        assert!(app
+            .copy_failure_hint("test")
+            .contains("Press Enter to retry"));
+        app.key(b'X' as usize, false);
+        assert!(!app.visible);
+    }
+}
+
+#[test]
+fn toggling_during_a_stroke_keeps_it_active_and_prevents_tap_completion() {
+    unsafe {
+        let mut app = app();
+        app.visible = true;
+        app.doc.select(
+            Rect::between(Point::default(), Point::new(100., 100.)),
+            false,
+        );
+        app.down_sample(false, Input::Space, Point::new(20., 20.), None, 0);
+        let id = app.doc.active.as_ref().unwrap().id;
+        app.key(0x10, false);
+        assert!(app.space);
+        assert!(app.gesture.is_some());
+        assert_eq!(app.doc.active.as_ref().unwrap().id, id);
+        app.moved_sample(Point::new(30., 30.), None, 20);
+        app.up_sample(false, Input::Space, Point::new(40., 40.), None, 30);
+        assert_eq!(app.doc.annotations.len(), 1);
+        assert!(app.pending_click.is_none());
+        assert!(app.visible);
+    }
+}
+
+#[test]
+fn locked_toolbar_cancel_still_closes_and_resets_lock() {
+    unsafe {
+        let mut app = app();
+        app.visible = true;
+        app.doc.select(
+            Rect::between(Point::default(), Point::new(100., 100.)),
+            false,
+        );
+        app.toggle_lock();
+        let bar = app.toolbar().unwrap();
+        let p = Point::new(
+            bar.right - render::TOOLBAR_CELL / 2.,
+            (bar.top + bar.bottom) / 2.,
+        );
+        app.down_sample(false, Input::Mouse, p, None, 0);
+        assert!(!app.visible);
+        assert!(!app.locked);
+    }
 }

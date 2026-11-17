@@ -696,9 +696,47 @@ impl Renderer {
                     );
                 }
             }
+            11 => {
+                box_at(5., 10., 19., 21.);
+                let path = self.factory.CreatePathGeometry()?;
+                let sink = path.Open()?;
+                sink.BeginFigure(p(8., 10.), D2D1_FIGURE_BEGIN_HOLLOW);
+                sink.AddLine(p(8., 7.));
+                sink.AddBezier(&D2D1_BEZIER_SEGMENT {
+                    point1: p(8., 1.7),
+                    point2: p(16., 1.7),
+                    point3: p(16., 7.),
+                });
+                sink.AddLine(p(16., 10.));
+                sink.EndFigure(D2D1_FIGURE_END_OPEN);
+                sink.Close()?;
+                target.DrawGeometry(&path, brush, 1.8 * self.scale, Some(&self.rounded_stroke));
+                line(12., 14., 12., 17.);
+            }
             _ => {}
         }
         Ok(())
+    }
+    unsafe fn lock_indicator(
+        &self,
+        target: &ID2D1RenderTarget,
+        selection: Rect,
+        opacity: f32,
+    ) -> Result<()> {
+        if opacity <= 0. {
+            return Ok(());
+        }
+        let black = target.CreateSolidColorBrush(&color(0., 0., 0., opacity), None)?;
+        let cell = Rect {
+            left: selection.right - 32. * self.scale,
+            top: selection.top + 4. * self.scale,
+            right: selection.right - 4. * self.scale,
+            bottom: selection.top + 32. * self.scale,
+        };
+        target.PushAxisAlignedClip(&rect(selection), D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
+        let result = self.icon(target, 11, cell, &black, 20.);
+        target.PopAxisAlignedClip();
+        result
     }
     pub unsafe fn schema_keys(&self, bindings: &crate::input::Bindings) -> Result<[Rect; 10]> {
         let format = self.write.CreateTextFormat(
@@ -987,6 +1025,7 @@ impl Renderer {
         );
         target.EndDraw(None, None)
     }
+    #[allow(clippy::too_many_arguments)]
     pub unsafe fn paint(
         &self,
         doc: &Document,
@@ -995,6 +1034,7 @@ impl Renderer {
         toolbar: Option<Rect>,
         pointer: Point,
         hint: &str,
+        lock_opacity: f32,
     ) -> Result<()> {
         self.update_ink(doc)?;
         let target: ID2D1RenderTarget = self.target.cast()?;
@@ -1063,6 +1103,9 @@ impl Renderer {
                 }
             } else {
                 target.FillRectangle(&rect(full), &shade);
+            }
+            if let Some(selection) = doc.selection {
+                self.lock_indicator(&target, selection, lock_opacity)?;
             }
             if let Some(bar) = toolbar {
                 target.FillRoundedRectangle(
