@@ -19,6 +19,6 @@ No added drawing delay or I/O, no desktop input/clipboard automation, no unrelat
 - [x] Add focused completion tests and memory rendering checks at common DPI.
 - [x] Update DESIGN.md/README.md; pass formatting, Clippy, routine tests, release build and offscreen stress.
 - [x] Record evidence, limitations, integration notes, and preserve baseline/candidate binaries.
-- [ ] Commit and push isolated branch, link implementation in #20, report once to coordinator.
+- [x] Commit and push isolated branch, link implementation in #20; report to coordinator on completion.
 
 Execution: this worker implements directly as requested; no helper workers. See delegation result for actual checks and native qualification limits.

@@ -43,4 +43,6 @@ Shared files: `src/windows/mod.rs` (App state/lifecycle, input gates, hints, ove
 
 Apply after #23 and before #25 per coordinator plan. Preserve #23 presentation lifecycle changes when merging the two visibility-only schema lines. #25 must retain lock state initialization/reset, lock-aware copy-failure messaging, and the existing toolbar Copy route while adding local save. No dependency on #25 changes. Resolve docs hunks by retaining both features. No master merge or release publication performed.
 
-Issue text: `issue-reply.md` (posted confirmed decisions), `issue-body.md` (final problem/decision/checklist), and `implementation-reply.md` (final implementation evidence). Commit and remote references are recorded after the implementation commit.
+Issue text: `issue-reply.md` (posted confirmed decisions), `issue-body.md` (posted final problem/decision/checklist), and `implementation-reply.md` (posted final implementation evidence).
+
+Implementation commit: [`03c5794`](https://github.com/nekoium/Myosotis/commit/03c5794), pushed to `origin/nekoium/release-1.0.0-issue-20`. Implementation/evidence comment: https://github.com/nekoium/Myosotis/issues/20#issuecomment-6953071044. The issue remains open for native confirmation and integration review. A final documentation commit records these references and the posted text; both commits are synced.
