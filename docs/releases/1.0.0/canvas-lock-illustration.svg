@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="340" viewBox="0 0 520 340" role="img" aria-labelledby="title desc">
+<title id="title">Canvas lock interface illustration</title><desc id="desc">Illustration following Myosotis's actual dark toolbar, selection handles, coral annotations, black padlock, and locked guidance. Not a native capture.</desc>
+<rect width="520" height="340" fill="#96989b"/>
+<rect x="16" y="16" width="488" height="204" fill="#fff"/>
+<g font-family="Segoe UI,sans-serif"><text x="36" y="49" font-size="17" font-weight="600" fill="#252936">Move the button here</text><text x="36" y="73" font-size="12" fill="#596579">Keep adding detail.</text></g>
+<!-- Annotation defaults: width 3 DIP; arrow 0.8 × width, 15-DIP wings at ±0.5 rad; rectangle 0.6 × width and 3-DIP corners. -->
+<rect x="240" y="102" width="160" height="32" rx="3" fill="none" stroke="#c74656" stroke-width="1.8"/>
+<path d="M250 180L330 139M321.565 151.404L330 139L315.005 138.604" fill="none" stroke="#c74656" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+<g fill="none" stroke="#5865d8" stroke-width="1"><rect x="16" y="16" width="488" height="204"/></g><g fill="#5865d8"><path d="M13 13h6v6h-6zM501 13h6v6h-6zM13 217h6v6h-6zM501 217h6v6h-6z"/></g>
+<!-- 28-DIP lock cell inset 4 DIP; 20-DIP icon, matching render.rs icon 11. -->
+<g transform="translate(478 24) scale(.833333)" fill="none" stroke="#000" stroke-width="2.16" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="11" rx="1.5"/><path d="M8 10V7C8 1.7 16 1.7 16 7V10M12 14v3"/></g>
+<!-- Six 40-DIP cells; source icon paths match render.rs indices 0..5. -->
+<rect x="16" y="232" width="240" height="40" rx="7" fill="#242424"/>
+<rect x="20" y="236" width="32" height="32" rx="4" fill="#505054"/><rect x="180" y="236" width="32" height="32" rx="4" fill="#5865d8"/>
+<g fill="none" stroke="#f1f1f3" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+<path transform="translate(24 240)" d="M4 16L16 4L20 8L8 20H4V16M13 7L17 11"/>
+<path transform="translate(64 240)" d="M5 19L19 5M9 5H19V15"/>
+<rect x="108" y="245" width="16" height="14" rx="1.5"/>
+<g transform="translate(144 240)"><circle cx="12" cy="12" r="9.36"/><path d="M10 9L12 7V17M9 17H15"/></g>
+<g transform="translate(184 240)"><rect x="8" y="8" width="12" height="13" rx="1.5"/><path d="M16 4H4V16"/></g>
+<path transform="translate(224 240)" d="M6 6L18 18M6 18L18 6"/>
+</g>
+<rect x="16" y="280" width="444" height="29" rx="4" fill="#242424"/>
+<text x="26" y="299" font-family="Segoe UI,sans-serif" font-size="12" fill="#f1f1f3">Canvas locked · Shift unlock · Z undo · Toolbar to finish</text>
+</svg>

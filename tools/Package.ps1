@@ -13,6 +13,9 @@ try {
     [void][IO.Directory]::CreateDirectory($folder)
     Copy-Item (Join-Path $metadata.target_directory 'release/myosotis.exe') $folder -Force
     Copy-Item 'README.md','LICENSE','THIRD_PARTY_NOTICES.md' $folder -Force
+    $assets = Join-Path $folder 'assets'
+    [void][IO.Directory]::CreateDirectory($assets)
+    Copy-Item 'assets/myosotis.svg' $assets -Force
     $images = Join-Path $folder 'docs/images'
     [void][IO.Directory]::CreateDirectory($images)
     Copy-Item 'docs/images/myosotis-light.png','docs/images/myosotis-dark.png','docs/images/input-schema.png','docs/images/input-schema-light.png' $images -Force

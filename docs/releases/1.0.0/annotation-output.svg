@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="150" height="85" viewBox="0 0 150 85" role="img" aria-labelledby="title"><title id="title">Rectangle and arrow using Myosotis annotation geometry</title>
+<rect x="10" y="18" width="125" height="27" fill="#f1f3f8"/>
+<!-- render.rs annotation(): width=3 DIP; rectangle width × 0.6, radius 3 DIP. -->
+<rect x="8" y="16" width="129" height="31" rx="3" fill="none" stroke="#c74656" stroke-width="1.8"/>
+<!-- Arrow width × 0.8, round caps, wings min(15 DIP, length × 0.45) at ±0.5 radians from shaft. -->
+<path d="M25 73L75 51M65.847 62.884L75 51L60.055 49.719" stroke="#c74656" fill="none" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
