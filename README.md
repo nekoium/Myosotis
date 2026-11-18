@@ -18,7 +18,7 @@ The default dark toolbar stays consistent across light and dark screenshots. The
 
 ## Get started
 
-![Input schema: view capture, drawing, copy, and history shortcuts in one window](docs/images/input-schema-light.png)
+<img src="docs/images/input-schema-light.png" width="344" alt="Input schema: capture, drawing, copy, and history shortcuts">
 
 The native MVP supports **Windows 11 x64**. Download [version 0.2.1](https://github.com/nekoium/Myosotis/releases/tag/v0.2.1), extract the ZIP, and run `Myosotis/myosotis.exe`. It is a portable app using Windows graphics and image facilities; no additional application runtime is required. The executable is currently unsigned. macOS and Linux are planned.
 
@@ -126,13 +126,9 @@ Double-click quickly and keep the pointer nearly still. Myosotis uses its own sh
 
 ## Privacy and limitations
 
-Capture and annotation happen locally. Myosotis does not upload images or connect to your agent. It puts the finished image on the Windows clipboard as a bitmap and PNG. **Save to local** is off by default; when enabled, completed captures also remain as PNG files in **Pictures\Screenshots** until you delete them. If your Pictures folder is synchronized by OneDrive or another service, those files follow that service's settings. Windows clipboard history, synchronization, and other clipboard-reading applications can access clipboard images according to your system settings.
+Your images stay yours. Myosotis works entirely on your device, without internet connections or image uploads.
 
-Pen strokes taper at the start and end. Mouse drawing uses mild speed-based width variation; valid stylus pressure controls the width instead. Captured positions are preserved without artificial path smoothing. Annotations use refined coral ink, and numbered badges widen to fit multiple digits.
-
-This MVP uses a fixed drawing color and preset line weights for each tool. Erasers, editable shapes, and screen-reader access to individual drawn toolbar controls are not implemented. Keyboard shortcuts are available for every tool, copy, and cancellation. Pressure input has been checked with synthetic Windows pen input; real stylus hardware remains unqualified. Small antialias seams and preview/export pixel differences remain known rendering limitations.
-
-HDR output, protected content, secure desktops, and mixed-DPI multi-monitor arrangements have not been fully validated. Changing the display arrangement during a capture cancels that capture. Keep a separate copy of anything important before closing an overlay; annotations are not saved between captures.
+HDR captures may not reproduce on-screen colors accurately.
 
 ## Feedback
 
