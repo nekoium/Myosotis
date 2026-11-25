@@ -1,12 +1,12 @@
 {
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Capture, scribble, and paste. A small native Windows screenshot annotation app.",
     "homepage": "https://github.com/nekoium/Myosotis",
     "license": "MIT",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/nekoium/Myosotis/releases/download/v1.0.0/Myosotis-1.0.0-windows-x64.zip",
-            "hash": "fbbadedb14aba7940e9dfaeef52a85e250e64da648aac55f4a6e636042d925c6"
+            "url": "https://github.com/nekoium/Myosotis/releases/download/v1.0.1/Myosotis-1.0.1-windows-x64.zip",
+            "hash": "60832e0794d897a40f2bbf23cf98f5d3a15651990edd102a9637dff2dce1e2c4"
         }
     },
     "extract_dir": "Myosotis",
