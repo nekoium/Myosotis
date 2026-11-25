@@ -25,11 +25,11 @@ The native MVP supports **Windows 11 x64**. Download [version 1.0.0](https://git
 ### Install with Scoop
 
 ```powershell
-scoop bucket add myosotis https://github.com/nekoium/Myosotis
-scoop install myosotis/myosotis
+scoop bucket add nekoium https://github.com/nekoium/scoop-bucket
+scoop install nekoium/myosotis
 ```
 
-This uses the project's own Scoop bucket. It creates a Start menu shortcut and a `myosotis` command. To update, run `scoop update myosotis`. Myosotis is not yet listed in the WinGet or Chocolatey community catalogs.
+It creates a Start menu shortcut and a `myosotis` command. To update, run `scoop update myosotis`. Myosotis is not yet listed in the WinGet or Chocolatey community catalogs.
 
 ### Build from source
 

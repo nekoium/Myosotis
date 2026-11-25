@@ -11,18 +11,20 @@ For a new version:
 3. Run the checks in CONTRIBUTING.md and `tools/Package.ps1`. Run the native smoke check against the packaged executable on an idle desktop.
 4. Update the Scoop manifest and WinGet manifests with the version, permanent release URL, and ZIP hash. Add release notes under `docs/releases/`.
 5. Commit, push, create and push the matching `v<version>` tag, and publish the GitHub release with the ZIP and `.sha256` file.
-6. Verify a clean download's checksum and an installation through Scoop.
+6. Verify a clean download's checksum. Run `gh workflow run sync.yml --repo nekoium/scoop-bucket`, confirm the shared bucket's **Sync manifests** workflow succeeds and contains the released version, then verify an installation through `nekoium/myosotis`.
 
-## Scoop: project-owned bucket
+## Scoop: shared nekoium bucket
 
-`bucket/myosotis.json` makes this repository a Scoop bucket. No community submission or separate account is required:
+New installations use the shared [nekoium bucket](https://github.com/nekoium/scoop-bucket). No community submission or separate account is required:
 
 ```powershell
-scoop bucket add myosotis https://github.com/nekoium/Myosotis
-scoop install myosotis/myosotis
+scoop bucket add nekoium https://github.com/nekoium/scoop-bucket
+scoop install nekoium/myosotis
 ```
 
-The manifest points to GitHub release assets and adds a command shim and Start menu shortcut. New releases require a version/hash update to this bucket. The `checkver` and `autoupdate` metadata help maintainers discover and generate those updates; they do not run automatically in this repository. Quit Myosotis before upgrading or uninstalling it.
+Keep `bucket/myosotis.json` in this repository as the source manifest. Existing installations using the original `myosotis` bucket continue to update from it without migration. The shared bucket copies this manifest hourly and on manual workflow runs, verifying changed release downloads against their SHA-256 before publishing. Update the source manifest with each release, publish and verify the release assets, then run the shared bucket's workflow and confirm success before announcing Scoop availability. Do not edit the shared copy directly.
+
+The manifest points to GitHub release assets and adds a command shim and Start menu shortcut. The `checkver` and `autoupdate` metadata help maintainers discover and generate version/hash updates; they do not publish releases or update this source manifest automatically. Quit Myosotis before upgrading or uninstalling it.
 
 Submission to Scoop Extras would be a separate pull request subject to its inclusion criteria and review. The custom bucket works without acceptance into Extras.
 
@@ -50,6 +52,6 @@ Reference: [Microsoft's submission process](https://learn.microsoft.com/en-us/wi
 
 Chocolatey Community Repository needs its own NuGet package: a `.nuspec` plus `tools/chocolateyInstall.ps1` and uninstall handling. The install script should download the canonical GitHub ZIP, verify SHA-256, and set up the portable executable/shortcut. Test install, upgrade, running-app behavior, and uninstall; build with `choco pack`; submit with `choco push` using a Chocolatey account's API key. New packages enter community moderation before general availability.
 
-No Chocolatey package or account was configured for this release. GitHub credentials do not authorize Chocolatey publishing. The recommended initial distribution is GitHub Releases plus the project-owned Scoop bucket, with WinGet as the next catalog submission.
+No Chocolatey package or account was configured for this release. GitHub credentials do not authorize Chocolatey publishing. The recommended initial distribution is GitHub Releases plus the shared nekoium Scoop bucket, with WinGet as the next catalog submission.
 
 Reference: [Chocolatey package creation](https://docs.chocolatey.org/en-us/create/create-packages/).
