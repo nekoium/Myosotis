@@ -1,4 +1,4 @@
-# <img src="assets/myosotis.svg" width="40" height="40" align="absmiddle" alt=""> Myosotis
+# <img src="assets/myosotis.svg" width="40" height="40" align="top" alt=""> Myosotis
 
 ### Talk is cheap, show them the pic.
 
